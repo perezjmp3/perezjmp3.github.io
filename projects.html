@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Projects - Justin M. Perez</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 16px;line-height:1.6}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    nav a{margin-right:14px;text-decoration:none}
+    .btn{display:inline-block;padding:10px 14px;border:1px solid #ccc;border-radius:10px;text-decoration:none}
+    footer{margin-top:40px;font-size:14px;color:#666}
+    .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:24px;margin-top:24px}
+    .project-card{border:1px solid #ddd;border-radius:8px;padding:20px;transition:box-shadow 0.2s}
+    .project-card:hover{box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+    .project-card h3{margin-top:0}
+    .project-card p{color:#666;margin:12px 0}
+    .project-card a{color:#0066cc;text-decoration:none}
+    .project-card a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Perez, Justin - Interesting Website</h1>
+    <nav>
+      <a href="./index.html">Home</a>
+      <a href="./projects.html">Projects</a>
+      <a href="./resume.pdf" class="btn">Insert amazing resume here</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>Projects</h2>
+    <p>A collection of interactive demos and experiments.</p>
+
+    <div class="project-grid">
+      <div class="project-card">
+        <h3>3D Dice Roller</h3>
+        <p>Physics-based dice simulator with realistic rolling, multiple dice types (d4, d6, d8, d12, d20), customizable materials, and interactive 3D environment.</p>
+        <a href="./3d-environment.html">View Project →</a>
+      </div>
+
+      <div class="project-card">
+        <h3>3D Blackjack</h3>
+        <p>Interactive blackjack game with a 3D casino table environment. Play against the dealer with realistic card dealing and game mechanics.</p>
+        <a href="./3d-blackjack.html">View Project →</a>
+      </div>
+
+      <div class="project-card">
+        <h3>3D Chess</h3>
+        <p>Interactive 3D chess game with physics-based pieces. Play on a fully interactive board with piece selection, move validation, and move history tracking.</p>
+        <a href="./3d-chess.html">View Project →</a>
+      </div>
+
+      <div class="project-card">
+        <h3>Physics Debug Environment</h3>
+        <p>Blank 3D world with physics debugging tools. Features wireframe grid, axes helper, and physics body visualization for testing and development.</p>
+        <a href="./debug-physics.html">View Project →</a>
+      </div>
+
+      <!-- Future projects will be added here -->
+    </div>
+  </main>
+
+  <footer>© <span id="y"></span> Justin M. Perez</footer>
+  <script>document.getElementById('y').textContent=new Date().getFullYear();</script>
+</body>
+</html>

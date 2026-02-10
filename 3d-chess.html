@@ -1,0 +1,3197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D Chess - Justin M. Perez</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=">
+    <style>
+        html, body { height: 100%; margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
+        body { overflow: hidden; background: #1a1a1a; }
+        #c { display: block; width: 100vw; height: 100vh; }
+        nav { position: fixed; top: 10px; left: 10px; z-index: 100; }
+        nav a { color: white; margin-right: 14px; text-decoration: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); }
+        .btn { display: inline-block; padding: 10px 14px; border: 1px solid rgba(255,255,255,0.3); border-radius: 10px; backdrop-filter: blur(5px); background: rgba(255,255,255,0.1); }
+        .game-controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 10px; }
+        .game-btn { padding: 12px 24px; border: none; border-radius: 8px; background: rgba(255,255,255,0.2); color: white; font-family: inherit; font-size: 16px; cursor: pointer; backdrop-filter: blur(5px); transition: background 0.2s; }
+        .game-btn:hover { background: rgba(255,255,255,0.3); }
+        .game-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .game-btn.primary { background: rgba(46, 204, 113, 0.8); }
+        .game-btn.primary:hover { background: rgba(46, 204, 113, 1); }
+        .game-info { position: fixed; top: 60px; left: 10px; z-index: 100; color: white; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; backdrop-filter: blur(5px); font-size: 14px; line-height: 1.6; width: 200px; }
+        .game-info h3 { margin: 0 0 10px 0; font-size: 18px; }
+        .game-info .label { font-weight: bold; margin-top: 8px; }
+        .move-history { position: fixed; top: 60px; right: 10px; z-index: 100; color: white; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; backdrop-filter: blur(5px); font-size: 12px; line-height: 1.4; max-width: 220px; max-height: 320px; overflow-y: auto; }
+        .move-history h3 { margin: 0 0 8px 0; font-size: 16px; }
+        .move-history .move-entry { opacity: 0.9; margin-bottom: 4px; padding: 2px 4px; border-left: 2px solid #2ecc71; }
+        .move-history .move-entry.white { border-left-color: #e0e0e0; }
+        .move-history .move-entry.black { border-left-color: #333333; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background: rgba(30,30,30,0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 40px; backdrop-filter: blur(10px); text-align: center; max-width: 500px; }
+        .modal-content h2 { color: white; margin: 0 0 30px 0; font-size: 28px; }
+        .modal-content p { color: #ccc; margin: 0 0 20px 0; }
+        .mode-buttons { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+        .mode-btn { padding: 16px 24px; border: none; border-radius: 8px; background: rgba(70, 130, 180, 0.8); color: white; font-family: inherit; font-size: 16px; cursor: pointer; transition: background 0.2s; }
+        .mode-btn:hover { background: rgba(70, 130, 180, 1); }
+        .elo-container { margin: 20px 0; }
+        .elo-container input { width: 100%; padding: 10px; border: none; border-radius: 6px; font-size: 16px; text-align: center; }
+        .color-buttons { display: flex; gap: 10px; justify-content: center; margin: 20px 0; }
+        .color-btn { padding: 12px 20px; border: none; border-radius: 6px; background: rgba(100,100,100,0.8); color: white; font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+        .color-btn:hover { background: rgba(100,100,100,1); }
+        .color-btn.white { background: rgba(220,220,220,0.8); color: #000; }
+        .color-btn.white:hover { background: rgba(220,220,220,1); }
+        .color-btn.black { background: rgba(50,50,50,0.9); }
+        .color-btn.black:hover { background: rgba(50,50,50,1); }
+        .promotion-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .promotion-btn { padding: 12px 18px; border: none; border-radius: 8px; background: rgba(120,120,120,0.9); color: white; font-family: inherit; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+        .promotion-btn:hover { background: rgba(150,150,150,1); }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="./index.html">Home</a>
+        <a href="./projects.html">Projects</a>
+        <a href="./resume.pdf" class="btn">Resume</a>
+    </nav>
+
+    <div class="game-info">
+        <h3>3D Chess</h3>
+        <div class="label" id="currentTurn">White to move</div>
+        <div id="gameStatus" style="margin-top: 8px; font-size: 13px;"></div>
+    </div>
+
+    <div class="move-history" id="moveHistory">
+        <h3>Moves</h3>
+        <div id="moveHistoryEntries"></div>
+    </div>
+
+    <div class="modal-overlay" id="gameModeModal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Select Game Mode</h2>
+            <div id="modalBody">
+                <div class="mode-buttons" id="modeButtons">
+                    <button class="mode-btn" id="twoPlayerBtn">2 Player</button>
+                    <button class="mode-btn" id="vsAiBtn">vs AI</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="promotionModal">
+        <div class="modal-content">
+            <h2>Promote Pawn</h2>
+            <p>Choose a piece</p>
+            <div class="promotion-buttons">
+                <button class="promotion-btn" data-piece="queen">Queen</button>
+                <button class="promotion-btn" data-piece="rook">Rook</button>
+                <button class="promotion-btn" data-piece="bishop">Bishop</button>
+                <button class="promotion-btn" data-piece="knight">Knight</button>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="c"></canvas>
+
+    <div class="game-controls">
+        <button id="resetBtn" class="game-btn primary">New Game</button>
+        <button id="undoBtn" class="game-btn">Undo</button>
+        <button id="endTurnBtn" class="game-btn">End Turn</button>
+    </div>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three/three.module.js",
+        "three/addons/": "./lib/three/",
+        "lil-gui": "./lib/lil-gui/lil-gui.esm.js"
+      }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/OrbitControls.js';
+        import { mergeGeometries } from 'https://unpkg.com/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
+        import GUI from 'lil-gui';
+
+        // --- Shared scaling from blackjack table ---
+        const TABLE_WIDTH_UNITS = 10.4;
+        const TABLE_DEPTH_UNITS = 6.5;
+        const REAL_TABLE_WIDTH_M = 2.1;
+        const UNIT_IN_METERS = REAL_TABLE_WIDTH_M / TABLE_WIDTH_UNITS;
+        const TABLE_Y_SHIFT = -0.13;
+        const FELT_TOP_Y = 0;
+
+        // Chess piece dimensions (visual + physics) in scene units
+        const PIECE_SPECS = {
+            pawn:  { radius: 0.16, height: 0.35 },
+            rook:  { radius: 0.18, height: 0.42 },
+            knight:{ radius: 0.18, height: 0.42 },
+            bishop:{ radius: 0.17, height: 0.45 },
+            queen: { radius: 0.19, height: 0.50 },
+            king:  { radius: 0.19, height: 0.54 }
+        };
+
+        // Chess board settings
+        const BOARD_SIZE = 8;
+        const SQUARE_SIZE = 0.6; // smaller board footprint
+        // Place board directly on felt (same interaction as blackjack chips)
+        const BOARD_TOP_Y = FELT_TOP_Y;
+        // Board surface is top of the board squares
+        const BOARD_SURFACE_Y = BOARD_TOP_Y + 0.04;
+
+        // Room matches blackjack environment
+        const ROOM = {
+            width: 24,
+            depth: 18,
+            height: 12,
+            wallThickness: 0.3,
+            wainscotHeight: 2.6,
+            floorY: -3.65,
+            ceilingY: 8.35
+        };
+
+        // --- Rapier setup ---
+        const rapierMod = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.13.1/rapier.es.js');
+        const RAPIER = rapierMod.default || rapierMod;
+        if (typeof RAPIER.init === 'function') {
+            await RAPIER.init();
+        }
+        const rapierWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+        rapierWorld.integrationParameters.dt = 1 / 60;
+
+        // --- Game Mode State ---
+        const gameMode = {
+            type: null, // '2player' or 'ai'
+            aiElo: 1200,
+            playerColor: null // 'white', 'black', or determined on start if 'random'
+        };
+
+        // Track last fully committed board to recover a move if pendingMove gets lost
+        let lastCommittedBoardState = null;
+
+        // --- Scene setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 6, 8);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 4;
+        controls.maxDistance = 20;
+        controls.maxPolarAngle = Math.PI / 2.1;
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xfff4e6, 1.2);
+        scene.add(ambientLight);
+
+        const axes = new THREE.AxesHelper(5);
+        axes.visible = false;
+        scene.add(axes);
+
+        const grid = new THREE.GridHelper(30, 30, 0x00aaff, 0x334455);
+        grid.material.opacity = 0.35;
+        grid.material.transparent = true;
+        grid.visible = false;
+        scene.add(grid);
+
+        const roomGroup = new THREE.Group();
+
+        // Room materials
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0xc9b89a, roughness: 0.8, metalness: 0.0 });
+        const wallUpperMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.85, metalness: 0.0 });
+        const woodPanelMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.65, metalness: 0.05 });
+        const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc8, roughness: 0.9, metalness: 0.0 });
+        const trimMat = new THREE.MeshStandardMaterial({ color: 0x5a4738, roughness: 0.5, metalness: 0.2 });
+
+        const floor = new THREE.Mesh(new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth), floorMat);
+        floor.position.set(0, ROOM.floorY, 0);
+        floor.receiveShadow = true;
+        roomGroup.add(floor);
+
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth), ceilingMat);
+        ceiling.position.set(0, ROOM.ceilingY, 0);
+        ceiling.receiveShadow = true;
+        roomGroup.add(ceiling);
+
+        function createWallWithWainscot(w, h, x, y, z, rotY) {
+            const wallGroup = new THREE.Group();
+            const wainscot = new THREE.Mesh(new THREE.BoxGeometry(w, ROOM.wainscotHeight, ROOM.wallThickness), woodPanelMat);
+            wainscot.position.set(0, ROOM.wainscotHeight / 2 + ROOM.floorY + 0.1, 0);
+            wainscot.castShadow = true;
+            wainscot.receiveShadow = true;
+            wallGroup.add(wainscot);
+
+            const panelLineCount = Math.floor(w / 1.2);
+            const panelLineMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.7, metalness: 0.05 });
+            for (let i = 0; i < panelLineCount; i++) {
+                const lineX = -w / 2 + (i + 0.5) * (w / panelLineCount);
+                const line = new THREE.Mesh(new THREE.BoxGeometry(0.02, ROOM.wainscotHeight, ROOM.wallThickness + 0.02), panelLineMat);
+                line.position.set(lineX, ROOM.wainscotHeight / 2 + ROOM.floorY + 0.1, 0.01);
+                wallGroup.add(line);
+            }
+
+            const upperH = h - ROOM.wainscotHeight - 0.3;
+            const upper = new THREE.Mesh(new THREE.BoxGeometry(w, upperH, ROOM.wallThickness), wallUpperMat);
+            upper.position.set(0, ROOM.wainscotHeight + upperH / 2 + ROOM.floorY + 0.1, 0);
+            upper.castShadow = true;
+            upper.receiveShadow = true;
+            wallGroup.add(upper);
+
+            const crown = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, ROOM.wallThickness + 0.08), trimMat);
+            crown.position.set(0, ROOM.ceilingY - 0.1, 0);
+            crown.castShadow = true;
+            wallGroup.add(crown);
+
+            const baseboard = new THREE.Mesh(new THREE.BoxGeometry(w, 0.15, ROOM.wallThickness + 0.06), trimMat);
+            baseboard.position.set(0, ROOM.floorY + 0.075, 0);
+            baseboard.castShadow = true;
+            wallGroup.add(baseboard);
+
+            wallGroup.position.set(x, y, z);
+            wallGroup.rotation.y = rotY;
+            return wallGroup;
+        }
+
+        const roomBackWall = createWallWithWainscot(ROOM.width, ROOM.height, 0, 0, -ROOM.depth / 2, 0);
+        roomGroup.add(roomBackWall);
+
+        const frontLeftWall = createWallWithWainscot(ROOM.width * 0.25, ROOM.height, -ROOM.width / 2 + ROOM.width * 0.125, 0, ROOM.depth / 2, 0);
+        roomGroup.add(frontLeftWall);
+        const frontRightWall = createWallWithWainscot(ROOM.width * 0.25, ROOM.height, ROOM.width / 2 - ROOM.width * 0.125, 0, ROOM.depth / 2, 0);
+        roomGroup.add(frontRightWall);
+
+        const leftWallWidth = ROOM.depth;
+        const roomLeftWall = createWallWithWainscot(leftWallWidth, ROOM.height, -ROOM.width / 2, 0, 0, Math.PI / 2);
+        roomGroup.add(roomLeftWall);
+        const roomRightWall = createWallWithWainscot(leftWallWidth, ROOM.height, ROOM.width / 2, 0, 0, Math.PI / 2);
+        roomGroup.add(roomRightWall);
+
+        const mainCeilingLight = new THREE.SpotLight(0xfff4e6, 20, 40, Math.PI * 0.85, 0.25, 1.5);
+        mainCeilingLight.position.set(0, ROOM.ceilingY - 0.2, 0);
+        mainCeilingLight.castShadow = true;
+        mainCeilingLight.shadow.mapSize.width = 1024;
+        mainCeilingLight.shadow.mapSize.height = 1024;
+        mainCeilingLight.shadow.camera.near = 0.5;
+        mainCeilingLight.shadow.camera.far = 40;
+        mainCeilingLight.shadow.camera.fov = 110;
+        mainCeilingLight.shadow.bias = -0.0001;
+        mainCeilingLight.shadow.radius = 2;
+        const lightTarget = new THREE.Object3D();
+        lightTarget.position.set(0, 0, 0);
+        scene.add(lightTarget);
+        mainCeilingLight.target = lightTarget;
+        roomGroup.add(mainCeilingLight);
+
+        const lightBulb = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4e6, emissiveIntensity: 5.0, roughness: 0.2, metalness: 0.1 }));
+        lightBulb.position.set(0, ROOM.ceilingY - 0.4, 0);
+        roomGroup.add(lightBulb);
+
+        scene.add(roomGroup);
+
+        // --- Physics (Rapier) ---
+        const wireframeState = { showPhysicsWireframes: false, showAxes: false, showGrid: false };
+        const bodyWireframes = new Map(); // rb.handle -> { rb, line }
+
+        function makeWireShape(type, color = 0xff00ff) {
+            let geom;
+            const spec = PIECE_SPECS[type] || PIECE_SPECS.pawn;
+            
+            // Create wireframe from actual piece geometry for exact match
+            const pieceGeom = createPieceGeometry(type);
+            const edges = new THREE.EdgesGeometry(pieceGeom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
+            line.visible = wireframeState.showPhysicsWireframes;
+            return line;
+        }
+
+        function trackWireframe(rb, type, color = 0xff00ff) {
+            const line = makeWireShape(type, color);
+            bodyWireframes.set(rb.handle, { rb, line });
+            scene.add(line);
+            return line;
+        }
+
+        function removeWireframe(rb) {
+            const entry = bodyWireframes.get(rb.handle);
+            if (!entry) return;
+            scene.remove(entry.line);
+            bodyWireframes.delete(rb.handle);
+        }
+
+        function makeWireBox(hx, hy, hz, color = 0xff00ff) {
+            const geom = new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2);
+            const edges = new THREE.EdgesGeometry(geom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color }));
+            line.visible = wireframeState.showPhysicsWireframes;
+            return line;
+        }
+
+        function addStaticBox(hx, hy, hz, x, y, z, color = 0x00ffff) {
+            const rb = rapierWorld.createRigidBody(
+                RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z)
+            );
+            rapierWorld.createCollider(
+                RAPIER.ColliderDesc.cuboid(hx, hy, hz).setFriction(0.8).setRestitution(0.0),
+                rb
+            );
+            const line = makeWireBox(hx, hy, hz, color);
+            bodyWireframes.set(rb.handle, { rb, line });
+            scene.add(line);
+            return rb;
+        }
+
+        // Room static bodies
+        addStaticBox(ROOM.width / 2, 0.1, ROOM.depth / 2, 0, ROOM.floorY, 0, 0x00ffff); // floor
+        addStaticBox(ROOM.width / 2, 0.1, ROOM.depth / 2, 0, ROOM.ceilingY, 0, 0x00ffff); // ceiling
+        addStaticBox(ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2, 0, (ROOM.floorY + ROOM.ceilingY) / 2, -ROOM.depth / 2, 0x00ffff);
+        addStaticBox(ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2, 0, (ROOM.floorY + ROOM.ceilingY) / 2, ROOM.depth / 2, 0x00ffff);
+        addStaticBox(ROOM.wallThickness / 2, ROOM.height / 2, ROOM.depth / 2, -ROOM.width / 2, (ROOM.floorY + ROOM.ceilingY) / 2, 0, 0x00ffff);
+        addStaticBox(ROOM.wallThickness / 2, ROOM.height / 2, ROOM.depth / 2, ROOM.width / 2, (ROOM.floorY + ROOM.ceilingY) / 2, 0, 0x00ffff);
+
+        // Felt collider reshaped to chess board footprint (same interaction as blackjack chips)
+        const boardWidth = BOARD_SIZE * SQUARE_SIZE;
+        const boardDepth = BOARD_SIZE * SQUARE_SIZE;
+        const feltHalfHeight = 0.1;
+        // Position felt collider so its TOP surface is at BOARD_SURFACE_Y
+        addStaticBox(boardWidth / 2, feltHalfHeight, boardDepth / 2, 0, BOARD_SURFACE_Y - feltHalfHeight, 0, 0x339933);
+
+        // --- Blackjack table mesh reused as chess surface ---
+        function createBlackjackTableShape() {
+            const shape = new THREE.Shape();
+            const tableWidth = TABLE_WIDTH_UNITS;
+            const tableDepth = TABLE_DEPTH_UNITS;
+            const curveRadius = 5.2;
+            shape.moveTo(-tableWidth / 2, -tableDepth / 2);
+            shape.lineTo(tableWidth / 2, -tableDepth / 2);
+            shape.lineTo(tableWidth / 2, tableDepth / 2 - curveRadius);
+            const numCurveSegments = 32;
+            for (let i = 0; i <= numCurveSegments; i++) {
+                const angle = (i / numCurveSegments) * Math.PI;
+                const x = Math.cos(angle) * curveRadius;
+                const z = Math.sin(angle) * curveRadius;
+                shape.lineTo(x, tableDepth / 2 - curveRadius + z);
+            }
+            shape.lineTo(-tableWidth / 2, tableDepth / 2 - curveRadius);
+            shape.lineTo(-tableWidth / 2, -tableDepth / 2);
+            return shape;
+        }
+
+        const tableShape = createBlackjackTableShape();
+        const extrudeSettings = { depth: 0.13, bevelEnabled: true, bevelThickness: 0.026, bevelSize: 0.026, bevelSegments: 3 };
+        const tableGeometry = new THREE.ExtrudeGeometry(tableShape, extrudeSettings);
+        const tableMaterial = new THREE.MeshStandardMaterial({ color: 0x0a5f1e, roughness: 0.8, metalness: 0.0 });
+        const table = new THREE.Mesh(tableGeometry, tableMaterial);
+        table.rotation.x = -Math.PI / 2;
+        table.rotation.z = Math.PI;
+        table.position.y = -extrudeSettings.depth + TABLE_Y_SHIFT;
+        table.receiveShadow = true;
+        scene.add(table);
+
+        const railGeometry = new THREE.ExtrudeGeometry(createBlackjackTableShape(), { depth: 0.156, bevelEnabled: true, bevelThickness: 0.013, bevelSize: 0.013, bevelSegments: 2 });
+        const railMaterial = new THREE.MeshStandardMaterial({ color: 0x2d1810, roughness: 0.6, metalness: 0.1 });
+        const rail = new THREE.Mesh(railGeometry, railMaterial);
+        rail.rotation.x = -Math.PI / 2;
+        rail.rotation.z = Math.PI;
+        rail.position.y = -0.156 + TABLE_Y_SHIFT;
+        rail.castShadow = true;
+        rail.receiveShadow = true;
+        scene.add(rail);
+
+        function createCurbShape() {
+            const shape = new THREE.Shape();
+            const tableWidth = 9.88;
+            const tableDepth = 5.98;
+            const curveRadius = 4.68;
+            shape.moveTo(-tableWidth / 2, -tableDepth / 2);
+            shape.lineTo(tableWidth / 2, -tableDepth / 2);
+            shape.lineTo(tableWidth / 2, tableDepth / 2 - curveRadius);
+            const numCurveSegments = 32;
+            for (let i = 0; i <= numCurveSegments; i++) {
+                const angle = (i / numCurveSegments) * Math.PI;
+                const x = Math.cos(angle) * curveRadius;
+                const z = Math.sin(angle) * curveRadius;
+                shape.lineTo(x, tableDepth / 2 - curveRadius + z);
+            }
+            shape.lineTo(-tableWidth / 2, tableDepth / 2 - curveRadius);
+            shape.lineTo(-tableWidth / 2, -tableDepth / 2);
+            return shape;
+        }
+
+        const curbGeometry = new THREE.ExtrudeGeometry(createCurbShape(), { depth: 0.104, bevelEnabled: true, bevelThickness: 0.026, bevelSize: 0.026, bevelSegments: 3 });
+        const curbMaterial = new THREE.MeshStandardMaterial({ color: 0x1a4d28, roughness: 0.7, metalness: 0.0 });
+        const curb = new THREE.Mesh(curbGeometry, curbMaterial);
+        curb.rotation.x = -Math.PI / 2;
+        curb.rotation.z = Math.PI;
+        curb.position.y = 0.001 + TABLE_Y_SHIFT;
+        curb.castShadow = true;
+        curb.receiveShadow = true;
+        scene.add(curb);
+
+        // Table pedestal
+        const pedestalMaterial = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.7, metalness: 0.2 });
+        const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 1.04, 3.25, 16), pedestalMaterial);
+        pedestal.position.y = -1.625 + TABLE_Y_SHIFT;
+        pedestal.castShadow = true;
+        pedestal.receiveShadow = true;
+        scene.add(pedestal);
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(1.56, 1.95, 0.39, 16), pedestalMaterial);
+        base.position.y = -3.445 + TABLE_Y_SHIFT;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        scene.add(base);
+
+        // --- Chess board atop felt ---
+        const boardGroup = new THREE.Group();
+        const lightSquareColor = 0xf0d9b5;
+        const darkSquareColor = 0xb58863;
+        const boardSquares = {}; // squareNotation -> { row, col }
+        
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            for (let col = 0; col < BOARD_SIZE; col++) {
+                const isLight = (row + col) % 2 === 0;
+                const squareGeom = new THREE.BoxGeometry(SQUARE_SIZE, 0.04, SQUARE_SIZE);
+                const squareMat = new THREE.MeshStandardMaterial({ color: isLight ? lightSquareColor : darkSquareColor, roughness: 0.6, metalness: 0.0 });
+                const square = new THREE.Mesh(squareGeom, squareMat);
+                const x = (col - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                const z = (row - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                square.position.set(x, BOARD_TOP_Y + 0.02, z);
+                square.receiveShadow = true;
+                
+                // Add algebraic notation: a-h files, 1-8 ranks
+                const file = String.fromCharCode(97 + col); // 'a' to 'h'
+                const rank = 8 - row; // 8 to 1 (white at bottom)
+                const squareNotation = `${file}${rank}`;
+                
+                square.userData = { row, col, notation: squareNotation };
+                boardSquares[squareNotation] = { row, col };
+                boardGroup.add(square);
+            }
+        }
+        scene.add(boardGroup);
+
+        // --- Square highlighting system ---
+        const highlightedSquares = new Set(); // notation strings of highlighted squares
+        const highlightMaterial = new THREE.MeshStandardMaterial({
+            color: 0x4488ff,
+            emissive: 0x4488ff,
+            emissiveIntensity: 0.3,
+            roughness: 0.6,
+            metalness: 0.0,
+            transparent: true,
+            opacity: 0.7
+        });
+        const captureMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8B3A3A,
+            emissive: 0x8B3A3A,
+            emissiveIntensity: 0.3,
+            roughness: 0.6,
+            metalness: 0.0,
+            transparent: true,
+            opacity: 0.7
+        });
+        const castleMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff8800,
+            emissive: 0xff8800,
+            emissiveIntensity: 0.4,
+            roughness: 0.6,
+            metalness: 0.0,
+            transparent: true,
+            opacity: 0.7
+        });
+        
+        function highlightSquares(moves, castleNotation = null) {
+            // moves: array of move objects {notation, isCapture} or just notation strings
+            // castleNotation: optional notation for castle-eligible piece square
+            clearHighlights();
+            lastHighlightedMoves = moves; // Track for right-click capture
+            moves.forEach(move => {
+                const notation = typeof move === 'string' ? move : move.notation;
+                const isCapture = typeof move === 'object' ? move.isCapture : false;
+                const square = Array.from(boardGroup.children).find(s => s.userData.notation === notation);
+                if (square) {
+                    square.userData.originalMaterial = square.material;
+                    square.userData.isCapture = isCapture; // Track capture status
+                    square.material = isCapture ? captureMaterial : highlightMaterial;
+                    highlightedSquares.add(notation);
+                }
+            });
+            
+            // Highlight castle target square in orange
+            if (castleNotation) {
+                const square = Array.from(boardGroup.children).find(s => s.userData.notation === castleNotation);
+                if (square) {
+                    square.userData.originalMaterial = square.material;
+                    square.userData.isCastle = true;
+                    square.material = castleMaterial;
+                    highlightedSquares.add(castleNotation);
+                }
+            }
+        }
+        
+        function clearHighlights() {
+            highlightedSquares.forEach(notation => {
+                const square = Array.from(boardGroup.children).find(s => s.userData.notation === notation);
+                if (square && square.userData.originalMaterial) {
+                    square.material = square.userData.originalMaterial;
+                    delete square.userData.isCastle;
+                }
+            });
+            highlightedSquares.clear();
+        }
+        
+        function getPieceSquareNotation(piece) {
+            // Determine which board square a piece is currently on
+            let closestSquare = null;
+            let closestDist = Infinity;
+            
+            for (let notation in boardSquares) {
+                const { row, col } = boardSquares[notation];
+                const x = (col - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                const z = (row - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                
+                const dx = piece.mesh.position.x - x;
+                const dz = piece.mesh.position.z - z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestSquare = notation;
+                }
+            }
+            
+            return closestSquare;
+        }
+
+        // --- Castling helpers ---
+        function canCastle(kingPiece, rookPiece, boardState) {
+            if (!kingPiece || !rookPiece) return false;
+            if (kingPiece.type !== 'king' || rookPiece.type !== 'rook') return false;
+            if (kingPiece.isWhite !== rookPiece.isWhite) return false;
+            if (kingPiece.hasMoved || rookPiece.hasMoved) return false;
+            
+            // CRITICAL: King cannot castle if already in check
+            if (AI.isKingInCheck(boardState, kingPiece.isWhite)) return false;
+            
+            // Find positions
+            const kingNotation = getPieceSquareNotation(kingPiece);
+            const rookNotation = getPieceSquareNotation(rookPiece);
+            if (!kingNotation || !rookNotation) return false;
+            
+            const kingPos = boardSquares[kingNotation];
+            const rookPos = boardSquares[rookNotation];
+            
+            // Must be on same rank
+            if (kingPos.row !== rookPos.row) return false;
+            
+            // Check all squares between are empty
+            const minCol = Math.min(kingPos.col, rookPos.col);
+            const maxCol = Math.max(kingPos.col, rookPos.col);
+            for (let col = minCol + 1; col < maxCol; col++) {
+                const notation = rowColToSquare(kingPos.row, col);
+                if (boardState[notation]) return false; // Square occupied
+            }
+
+            // King cannot castle through or into check: intermediate and destination squares must be safe
+            const isKingside = rookPos.col === 7;
+            const pathCols = isKingside ? [5, 6] : [3, 2];
+            for (let col of pathCols) {
+                const sq = rowColToSquare(kingPos.row, col);
+                if (isSquareAttacked(boardState, sq, !kingPiece.isWhite)) return false;
+            }
+            
+            return true;
+        }
+
+        function getCastleTarget(draggedPiece) {
+            // Returns the notation of the compatible castle piece (king or rook)
+            if (!draggedPiece || (draggedPiece.type !== 'king' && draggedPiece.type !== 'rook')) return null;
+            if (draggedPiece.hasMoved) return null;
+            
+            const boardState = getBoardState();
+            const isWhite = draggedPiece.isWhite;
+            const expectedRow = isWhite ? 7 : 0;
+            
+            if (draggedPiece.type === 'king') {
+                // Check both rooks
+                for (let col of [0, 7]) {
+                    const key = `${expectedRow}_${col}`;
+                    const rook = gameState.pieces[key];
+                    if (rook && canCastle(draggedPiece, rook, boardState)) {
+                        return rowColToSquare(expectedRow, col);
+                    }
+                }
+            } else if (draggedPiece.type === 'rook') {
+                // Check if king is compatible
+                const kingCol = 4;
+                const key = `${expectedRow}_${kingCol}`;
+                const king = gameState.pieces[key];
+                if (king && canCastle(king, draggedPiece, boardState)) {
+                    return rowColToSquare(expectedRow, kingCol);
+                }
+            }
+            
+            return null;
+        }
+
+        function executeCastle(kingPiece, rookPiece) {
+            const kingNotation = getPieceSquareNotation(kingPiece);
+            const rookNotation = getPieceSquareNotation(rookPiece);
+            const kingPos = boardSquares[kingNotation];
+            const rookPos = boardSquares[rookNotation];
+            
+            // Determine kingside or queenside
+            const isKingside = rookPos.col === 7;
+            const newKingCol = isKingside ? 6 : 2;
+            const newRookCol = isKingside ? 5 : 3;
+            
+            const row = kingPos.row;
+            
+            // Update board state
+            const oldKingKey = `${row}_${kingPos.col}`;
+            const oldRookKey = `${row}_${rookPos.col}`;
+            const newKingKey = `${row}_${newKingCol}`;
+            const newRookKey = `${row}_${newRookCol}`;
+            
+            delete gameState.pieces[oldKingKey];
+            delete gameState.pieces[oldRookKey];
+            
+            kingPiece.row = row;
+            kingPiece.col = newKingCol;
+            kingPiece.hasMoved = true;
+            
+            rookPiece.row = row;
+            rookPiece.col = newRookCol;
+            rookPiece.hasMoved = true;
+            
+            gameState.pieces[newKingKey] = kingPiece;
+            gameState.pieces[newRookKey] = rookPiece;
+            
+            // Animate both pieces
+            const kingTargetX = (newKingCol - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const kingTargetZ = (row - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const kingTargetY = BOARD_SURFACE_Y + 0.5;
+            
+            const rookTargetX = (newRookCol - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const rookTargetZ = (row - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const rookTargetY = BOARD_SURFACE_Y + 0.5;
+            
+            kingPiece.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+            kingPiece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            kingPiece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            
+            rookPiece.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+            rookPiece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            rookPiece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            
+            snappingPieces.set(kingPiece, {
+                start: kingPiece.mesh.position.clone(),
+                end: new THREE.Vector3(kingTargetX, kingTargetY, kingTargetZ),
+                startTime: performance.now(),
+                duration: 400
+            });
+            
+            snappingPieces.set(rookPiece, {
+                start: rookPiece.mesh.position.clone(),
+                end: new THREE.Vector3(rookTargetX, rookTargetY, rookTargetZ),
+                startTime: performance.now(),
+                duration: 400
+            });
+            
+            // Record castle move
+            const castleNotation = isKingside ? 'O-O' : 'O-O-O';
+            const fromNotation = kingNotation;
+            const toNotation = rowColToSquare(row, newKingCol);
+            pendingMove = { from: fromNotation, to: toNotation, isWhite: kingPiece.isWhite, piece: 'castle', isCapture: false, notation: castleNotation };
+        }
+
+        // --- Move calculation logic ---
+        function getBoardState() {
+            // Returns map of notation -> {isWhite: boolean, type: string}
+            // Note: exclude the piece object to avoid circular structures during JSON serialization
+            const state = {};
+            for (let key in gameState.pieces) {
+                const piece = gameState.pieces[key];
+                if (!piece || !piece.type) continue;
+                const notation = getPieceSquareNotation(piece);
+                if (notation) {
+                    state[notation] = { isWhite: piece.isWhite, type: piece.type };
+                }
+            }
+            return state;
+        }
+
+        function squareToRowCol(notation) {
+            // "e4" -> {row: 4, col: 4}
+            const col = notation.charCodeAt(0) - 97; // 'a' = 0, 'h' = 7
+            const row = 8 - parseInt(notation[1], 10); // '8' = 0, '1' = 7
+            return { row, col };
+        }
+
+        function rowColToSquare(row, col) {
+            // {row: 4, col: 4} -> "e4"
+            if (row < 0 || row >= 8 || col < 0 || col >= 8) return null;
+            const file = String.fromCharCode(97 + col);
+            const rank = 8 - row;
+            return `${file}${rank}`;
+        }
+
+        function getValidMoves(currentNotation, piece, boardState, allowCastle = true, includeKingCapture = false) {
+            const { row, col } = squareToRowCol(currentNotation);
+            const moves = [];
+            const direction = piece.isWhite ? -1 : 1; // White moves up (negative row), Black moves down (positive row)
+            const lastMove = gameState.moveHistory[gameState.moveHistory.length - 1];
+
+            function canMoveTo(r, c) {
+                if (r < 0 || r >= 8 || c < 0 || c >= 8) return false;
+                const notation = rowColToSquare(r, c);
+                const occupant = boardState[notation];
+                // Can move if empty or occupied by opponent
+                return !occupant || occupant.isWhite !== piece.isWhite;
+            }
+
+            function slideInDirection(dr, dc) {
+                let r = row + dr;
+                let c = col + dc;
+                while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                    const notation = rowColToSquare(r, c);
+                    const occupant = boardState[notation];
+                    if (!occupant) {
+                        moves.push({ notation, isCapture: false });
+                    } else {
+                        // Can capture enemy pieces; allow king capture only for attack detection
+                        if (occupant.isWhite !== piece.isWhite && (includeKingCapture || occupant.type !== 'king')) {
+                            moves.push({ notation, isCapture: true });
+                        }
+                        break; // Stop sliding
+                    }
+                    r += dr;
+                    c += dc;
+                }
+            }
+
+            switch (piece.type) {
+                case 'pawn':
+                    // Move forward 1
+                    const oneStep = row + direction;
+                    if (oneStep >= 0 && oneStep < 8) {
+                        const notation = rowColToSquare(oneStep, col);
+                        if (!boardState[notation]) {
+                            moves.push({ notation, isCapture: false });
+                            // Move forward 2 from starting position
+                            const startRow = piece.isWhite ? 6 : 1;
+                            if (row === startRow) {
+                                const twoStep = row + direction * 2;
+                                const notation2 = rowColToSquare(twoStep, col);
+                                if (!boardState[notation2]) {
+                                    moves.push({ notation: notation2, isCapture: false });
+                                }
+                            }
+                        }
+                    }
+                    // Captures diagonally (including en passant)
+                    // Precompute en passant target if last move was a double-step pawn advance by the opponent
+                    let enPassantTargets = [];
+                    if (lastMove && lastMove.piece === 'pawn' && lastMove.isWhite !== piece.isWhite) {
+                        const { row: lmFromRow, col: lmFromCol } = squareToRowCol(lastMove.from);
+                        const { row: lmToRow, col: lmToCol } = squareToRowCol(lastMove.to);
+                        const steppedTwo = Math.abs(lmToRow - lmFromRow) === 2;
+                        if (steppedTwo) {
+                            const oppDir = lastMove.isWhite ? -1 : 1;
+                            enPassantTargets.push({ row: lmToRow - oppDir, col: lmToCol, pawnRow: lmToRow });
+                        }
+                    }
+                    // Fallback inference: if an adjacent enemy pawn sits on its double-step landing rank, allow en passant even without history
+                    // White double-step lands on row 4 (rank 4), capture target row 5 (rank 3); Black double-step lands on row 3 (rank 5), target row 2 (rank 6)
+                    Object.values(gameState.pieces).forEach(p => {
+                        if (p.type !== 'pawn' || p.isWhite === piece.isWhite) return;
+                        if (p.row === 4 && p.isWhite) { // white pawn that could have come from start with double step
+                            enPassantTargets.push({ row: 5, col: p.col, pawnRow: 4 });
+                        }
+                        if (p.row === 3 && !p.isWhite) { // black pawn double step landing rank
+                            enPassantTargets.push({ row: 2, col: p.col, pawnRow: 3 });
+                        }
+                    });
+
+                    for (let dc of [-1, 1]) {
+                        const r = row + direction;
+                        const c = col + dc;
+                        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const notation = rowColToSquare(r, c);
+                            const occupant = boardState[notation];
+                            if (occupant && occupant.isWhite !== piece.isWhite && (includeKingCapture || occupant.type !== 'king')) {
+                                moves.push({ notation, isCapture: true });
+                            } else if (!occupant) {
+                                const match = enPassantTargets.find(t => t.col === c && row === t.pawnRow && r === t.row);
+                                if (match) {
+                                    moves.push({ notation, isCapture: true });
+                                }
+                            }
+                        }
+                    }
+                    break;
+
+                case 'knight':
+                    const knightMoves = [
+                        [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+                        [1, -2], [1, 2], [2, -1], [2, 1]
+                    ];
+                    knightMoves.forEach(([dr, dc]) => {
+                        const r = row + dr;
+                        const c = col + dc;
+                        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const notation = rowColToSquare(r, c);
+                            const occupant = boardState[notation];
+                            const isCapture = !!occupant && occupant.isWhite !== piece.isWhite && (includeKingCapture || occupant.type !== 'king');
+                            if (!occupant || (occupant.isWhite !== piece.isWhite && (includeKingCapture || occupant.type !== 'king'))) {
+                                moves.push({ notation, isCapture });
+                            }
+                        }
+                    });
+                    break;
+
+                case 'bishop':
+                    slideInDirection(1, 1);
+                    slideInDirection(1, -1);
+                    slideInDirection(-1, 1);
+                    slideInDirection(-1, -1);
+                    break;
+
+                case 'rook':
+                    slideInDirection(1, 0);
+                    slideInDirection(-1, 0);
+                    slideInDirection(0, 1);
+                    slideInDirection(0, -1);
+                    break;
+
+                case 'queen':
+                    // All directions (rook + bishop)
+                    slideInDirection(1, 0);
+                    slideInDirection(-1, 0);
+                    slideInDirection(0, 1);
+                    slideInDirection(0, -1);
+                    slideInDirection(1, 1);
+                    slideInDirection(1, -1);
+                    slideInDirection(-1, 1);
+                    slideInDirection(-1, -1);
+                    break;
+
+                case 'king':
+                    const kingMoves = [
+                        [-1, -1], [-1, 0], [-1, 1],
+                        [0, -1], [0, 1],
+                        [1, -1], [1, 0], [1, 1]
+                    ];
+                    kingMoves.forEach(([dr, dc]) => {
+                        const r = row + dr;
+                        const c = col + dc;
+                        if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                            const notation = rowColToSquare(r, c);
+                            const occupant = boardState[notation];
+                            const isCapture = !!occupant && occupant.isWhite !== piece.isWhite && (includeKingCapture || occupant.type !== 'king');
+                            if (!occupant || (occupant.isWhite !== piece.isWhite && (includeKingCapture || occupant.type !== 'king'))) {
+                                moves.push({ notation, isCapture });
+                            }
+                        }
+                    });
+                    
+                    // Add castling moves if eligible
+                    if (allowCastle && !piece.hasMoved) {
+                        const expectedRow = piece.isWhite ? 7 : 0;
+                        if (row === expectedRow && col === 4) {
+                            // Check kingside castle (rook at col 7)
+                            const kingsideRookKey = `${expectedRow}_7`;
+                            const kingsideRook = gameState.pieces[kingsideRookKey];
+                            if (kingsideRook && kingsideRook.type === 'rook' && !kingsideRook.hasMoved) {
+                                // Check squares between are empty
+                                const f = rowColToSquare(expectedRow, 5);
+                                const g = rowColToSquare(expectedRow, 6);
+                                if (!boardState[f] && !boardState[g]) {
+                                    // Squares must not be under attack and king must not be in check
+                                    if (!AI.isKingInCheck(boardState, piece.isWhite) &&
+                                        !isSquareAttacked(boardState, f, !piece.isWhite) &&
+                                        !isSquareAttacked(boardState, g, !piece.isWhite)) {
+                                    moves.push({ notation: g, isCapture: false, isCastle: 'kingside' });
+                                    }
+                                }
+                            }
+                            
+                            // Check queenside castle (rook at col 0)
+                            const queensideRookKey = `${expectedRow}_0`;
+                            const queensideRook = gameState.pieces[queensideRookKey];
+                            if (queensideRook && queensideRook.type === 'rook' && !queensideRook.hasMoved) {
+                                // Check squares between are empty
+                                const b = rowColToSquare(expectedRow, 1);
+                                const c = rowColToSquare(expectedRow, 2);
+                                const d = rowColToSquare(expectedRow, 3);
+                                if (!boardState[b] && !boardState[c] && !boardState[d]) {
+                                    if (!AI.isKingInCheck(boardState, piece.isWhite) &&
+                                        !isSquareAttacked(boardState, d, !piece.isWhite) &&
+                                        !isSquareAttacked(boardState, c, !piece.isWhite)) {
+                                        moves.push({ notation: c, isCapture: false, isCastle: 'queenside' });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+            }
+
+            return moves;
+        }
+
+        // Check if a specific square is attacked by pieces of a given color
+        function isSquareAttacked(boardState, targetNotation, byWhite) {
+            for (let notation in boardState) {
+                const piece = boardState[notation];
+                if (!piece || piece.isWhite !== byWhite) continue;
+                const pseudoPiece = { isWhite: piece.isWhite, type: piece.type };
+                const moves = getValidMoves(notation, pseudoPiece, boardState, false, true);
+                for (let move of moves) {
+                    if (move.isCastle) continue; // Castling doesn't attack squares
+                    const moveNotation = typeof move === 'object' ? move.notation : move;
+                    if (moveNotation === targetNotation) return true;
+                }
+            }
+            return false;
+        }
+
+        // --- Chess piece visuals (simple procedural models) ---
+        const pieceMatWhite = new THREE.MeshStandardMaterial({ color: 0xf3f3f3, roughness: 0.25, metalness: 0.25, envMapIntensity: 1.2 });
+        const pieceMatBlack = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.3, envMapIntensity: 1.2 });
+
+        function lathe(points, segs = 48) {
+            return new THREE.LatheGeometry(points, segs);
+        }
+
+        function createPawnGeometry() {
+            const pts = [
+                new THREE.Vector2(0.0, 0.0),
+                new THREE.Vector2(0.16, 0.0),
+                new THREE.Vector2(0.18, 0.04),
+                new THREE.Vector2(0.15, 0.08),
+                new THREE.Vector2(0.14, 0.18),
+                new THREE.Vector2(0.10, 0.26),
+                new THREE.Vector2(0.11, 0.30),
+                new THREE.Vector2(0.09, 0.32),
+                new THREE.Vector2(0.0, 0.33)
+            ];
+            const stem = lathe(pts, 48);
+            const head = new THREE.SphereGeometry(0.09, 48, 32);
+            head.translate(0, 0.42, 0);
+            // Add flat base for stable collision
+            const base = new THREE.CylinderGeometry(0.17, 0.17, 0.02, 48);
+            base.translate(0, 0.01, 0);
+            return mergeGeometries([base, stem, head], true);
+        }
+
+        function createRookGeometry() {
+            // Castle tower with proper crenellations (battlements)
+            const base = new THREE.CylinderGeometry(0.13, 0.15, 0.06, 48);
+            const body = new THREE.CylinderGeometry(0.12, 0.12, 0.44, 48);
+            body.translate(0, 0.25, 0);
+            
+            // Create crenellated top - rectangular blocks arranged in circle (8 crenellations)
+            const geoms = [base, body];
+            const crenelCount = 8;
+            for (let i = 0; i < crenelCount; i++) {
+                const angle = (i / crenelCount) * Math.PI * 2;
+                const x = Math.cos(angle) * 0.13;
+                const z = Math.sin(angle) * 0.13;
+                
+                // Rectangular merlon (raised battlement)
+                const merlon = new THREE.BoxGeometry(0.04, 0.10, 0.07);
+                merlon.translate(x, 0.47, z);
+                geoms.push(merlon);
+            }
+            
+            return mergeGeometries(geoms, true);
+        }
+
+        function createBishopGeometry() {
+            // Bishop with pointed mitre (pointed hat) top
+            const pts = [
+                new THREE.Vector2(0.0, 0.0),
+                new THREE.Vector2(0.16, 0.0),
+                new THREE.Vector2(0.16, 0.06),
+                new THREE.Vector2(0.13, 0.14),
+                new THREE.Vector2(0.11, 0.22),
+                new THREE.Vector2(0.10, 0.32),
+                new THREE.Vector2(0.07, 0.38),
+                new THREE.Vector2(0.0, 0.40)
+            ];
+            const body = lathe(pts, 48);
+            
+            // Bishop topper: sphere with diagonal cut plane
+            const topperSphere = new THREE.SphereGeometry(0.08, 48, 32);
+            topperSphere.translate(0, 0.50, 0);
+            
+            // Diagonal cut plane through sphere
+            const cutPlane = new THREE.BoxGeometry(0.18, 0.02, 0.18);
+            cutPlane.rotateZ(Math.PI / 4);
+            cutPlane.translate(0, 0.50, 0);
+            
+            // Add flat base for stable collision
+            const base = new THREE.CylinderGeometry(0.16, 0.16, 0.02, 48);
+            base.translate(0, 0.01, 0);
+            
+            return mergeGeometries([base, body, topperSphere, cutPlane], true);
+        }
+
+        function createQueenGeometry() {
+            // Queen with crown
+            const pts = [
+                new THREE.Vector2(0.0, 0.0),
+                new THREE.Vector2(0.21, 0.0),
+                new THREE.Vector2(0.21, 0.06),
+                new THREE.Vector2(0.18, 0.12),
+                new THREE.Vector2(0.16, 0.22),
+                new THREE.Vector2(0.14, 0.34),
+                new THREE.Vector2(0.12, 0.42),
+                new THREE.Vector2(0.0, 0.44)
+            ];
+            const body = lathe(pts, 48);
+            
+            // Crown with 5 points
+            const crownBase = new THREE.CylinderGeometry(0.12, 0.12, 0.03, 48);
+            crownBase.translate(0, 0.47, 0);
+            
+            const geoms = [body, crownBase];
+            for (let i = 0; i < 5; i++) {
+                const angle = (i / 5) * Math.PI * 2;
+                const x = Math.cos(angle) * 0.10;
+                const z = Math.sin(angle) * 0.10;
+                const point = new THREE.ConeGeometry(0.04, 0.10, 32);
+                point.translate(x, 0.55, z);
+                geoms.push(point);
+            }
+            
+            // Central orb
+            const orb = new THREE.SphereGeometry(0.05, 32, 24);
+            orb.translate(0, 0.61, 0);
+            geoms.push(orb);
+            
+            // Add flat base for stable collision
+            const base = new THREE.CylinderGeometry(0.22, 0.22, 0.02, 48);
+            base.translate(0, 0.01, 0);
+            geoms.unshift(base);
+            
+            return mergeGeometries(geoms, true);
+        }
+
+        function createKingGeometry() {
+            // King with prominent cross and crown
+            const pts = [
+                new THREE.Vector2(0.0, 0.0),
+                new THREE.Vector2(0.22, 0.0),
+                new THREE.Vector2(0.22, 0.06),
+                new THREE.Vector2(0.19, 0.12),
+                new THREE.Vector2(0.17, 0.24),
+                new THREE.Vector2(0.15, 0.38),
+                new THREE.Vector2(0.13, 0.46),
+                new THREE.Vector2(0.0, 0.48)
+            ];
+            const body = lathe(pts, 48);
+            
+            // Cross on top
+            const crossHorizontal = new THREE.BoxGeometry(0.18, 0.03, 0.04);
+            crossHorizontal.translate(0, 0.54, 0);
+            const crossVertical = new THREE.BoxGeometry(0.04, 0.18, 0.04);
+            crossVertical.translate(0, 0.54, 0);
+            
+            // Crown base
+            const crownBase = new THREE.CylinderGeometry(0.11, 0.11, 0.03, 48);
+            crownBase.translate(0, 0.50, 0);
+            
+            const geoms = [body, crossHorizontal, crossVertical, crownBase];
+            
+            // Four corner points on crown
+            for (let i = 0; i < 4; i++) {
+                const angle = (i / 4) * Math.PI * 2;
+                const x = Math.cos(angle) * 0.085;
+                const z = Math.sin(angle) * 0.085;
+                const point = new THREE.ConeGeometry(0.03, 0.08, 24);
+                point.translate(x, 0.56, z);
+                geoms.push(point);
+            }
+            
+            // Top orb
+            const orb = new THREE.SphereGeometry(0.04, 32, 24);
+            orb.translate(0, 0.64, 0);
+            geoms.push(orb);
+            
+            // Add flat base for stable collision
+            const base = new THREE.CylinderGeometry(0.23, 0.23, 0.02, 48);
+            base.translate(0, 0.01, 0);
+            geoms.unshift(base);
+            
+            return mergeGeometries(geoms, true);
+        }
+
+        function createKnightGeometry() {
+            // Methodical construction of a chess knight (horse head)
+            const geoms = [];
+            
+            // STEP 1: Solid stable base platform
+            const baseGeom = new THREE.CylinderGeometry(0.22, 0.22, 0.03, 48);
+            baseGeom.translate(0, 0.015, 0);
+            geoms.push(baseGeom);
+            
+            // STEP 2: Pedestal - connects base to neck
+            const pedestalGeom = new THREE.CylinderGeometry(0.16, 0.16, 0.10, 48);
+            pedestalGeom.translate(0, 0.08, 0);
+            geoms.push(pedestalGeom);
+            
+            // STEP 3: Neck - tapers from pedestal to head
+            const neckGeom = new THREE.CylinderGeometry(0.12, 0.10, 0.14, 48);
+            neckGeom.translate(0, 0.21, 0);
+            geoms.push(neckGeom);
+            
+            // STEP 4: Main head cranium - broad sphere for the main head mass
+            const cranimGeom = new THREE.SphereGeometry(0.11, 64, 48);
+            cranimGeom.translate(0, 0.40, 0);
+            geoms.push(cranimGeom);
+            
+            // STEP 5: Muzzle/snout - tapered cone pointing forward
+            const muzzleGeom = new THREE.ConeGeometry(0.07, 0.14, 48);
+            muzzleGeom.rotateX(Math.PI / 2); // Point it forward
+            muzzleGeom.translate(0, 0.39, 0.16);
+            geoms.push(muzzleGeom);
+            
+            // STEP 6: Lower jaw - smaller sphere below muzzle for definition
+            const jawGeom = new THREE.SphereGeometry(0.055, 48, 36);
+            jawGeom.translate(0, 0.32, 0.12);
+            jawGeom.scale(1.4, 0.7, 1.0);
+            geoms.push(jawGeom);
+            
+            // STEP 7: Left ear - cone shape pointing back and up
+            const earLeftGeom = new THREE.ConeGeometry(0.048, 0.16, 48);
+            earLeftGeom.translate(-0.095, 0.52, -0.08);
+            earLeftGeom.rotateZ(-0.35); // angle back
+            geoms.push(earLeftGeom);
+            
+            // STEP 8: Right ear - cone shape pointing back and up
+            const earRightGeom = new THREE.ConeGeometry(0.048, 0.16, 48);
+            earRightGeom.translate(0.095, 0.52, -0.08);
+            earRightGeom.rotateZ(0.35); // angle back
+            geoms.push(earRightGeom);
+            
+            // STEP 9: Forehead bulge - sphere on front of cranium for better horse shape
+            const foreheadGeom = new THREE.SphereGeometry(0.06, 48, 36);
+            foreheadGeom.translate(0, 0.46, -0.09);
+            foreheadGeom.scale(1.1, 0.9, 0.8);
+            geoms.push(foreheadGeom);
+            
+            // STEP 10: Cheek definition - subtle spheres on sides of face
+            const cheekLeftGeom = new THREE.SphereGeometry(0.038, 40, 32);
+            cheekLeftGeom.translate(-0.108, 0.38, -0.02);
+            cheekLeftGeom.scale(1.2, 1.1, 0.8);
+            geoms.push(cheekLeftGeom);
+            
+            const cheekRightGeom = new THREE.SphereGeometry(0.038, 40, 32);
+            cheekRightGeom.translate(0.108, 0.38, -0.02);
+            cheekRightGeom.scale(1.2, 1.1, 0.8);
+            geoms.push(cheekRightGeom);
+            
+            // STEP 11: Eyes - small spheres for character
+            const eyeLeftGeom = new THREE.SphereGeometry(0.022, 32, 24);
+            eyeLeftGeom.translate(-0.065, 0.44, -0.08);
+            geoms.push(eyeLeftGeom);
+            
+            const eyeRightGeom = new THREE.SphereGeometry(0.022, 32, 24);
+            eyeRightGeom.translate(0.065, 0.44, -0.08);
+            geoms.push(eyeRightGeom);
+            
+            return mergeGeometries(geoms, true);
+        }
+
+        // Convert BufferGeometry to convex hull vertices (keeping original local positioning)
+        function geometryToHull(geometry) {
+            const geom = geometry.clone();
+            geom.computeBoundingBox();
+            const size = new THREE.Vector3();
+            geom.boundingBox.getSize(size);
+            const pos = geom.attributes.position;
+            const verts = new Float32Array(pos.count * 3);
+            for (let i = 0; i < pos.count; i++) {
+                verts[i * 3] = pos.getX(i);
+                verts[i * 3 + 1] = pos.getY(i);
+                verts[i * 3 + 2] = pos.getZ(i);
+            }
+            return { verts, size };
+        }
+
+        // Create exact convex hull collider from piece geometry
+        function createPieceCollider(geometry) {
+            const { verts } = geometryToHull(geometry);
+            const hullDesc = RAPIER.ColliderDesc.convexHull(verts);
+            if (!hullDesc) {
+                // Fallback if convex hull fails
+                return RAPIER.ColliderDesc.cuboid(0.15, 0.2, 0.15);
+            }
+            return hullDesc;
+        }
+
+        function createPieceGeometry(type) {
+            switch (type) {
+                case 'pawn': return createPawnGeometry();
+                case 'rook': return createRookGeometry();
+                case 'knight': return createKnightGeometry();
+                case 'bishop': return createBishopGeometry();
+                case 'queen': return createQueenGeometry();
+                case 'king': return createKingGeometry();
+                default: return createPawnGeometry();
+            }
+        }
+
+        function createPieceMesh(type, isWhite) {
+            const geom = createPieceGeometry(type);
+            const mesh = new THREE.Mesh(geom, isWhite ? pieceMatWhite : pieceMatBlack);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        }
+
+        // --- Game state ---
+        const gameState = {
+            pieces: {}, // key "r_c"
+            moveHistory: [],
+            isWhiteTurn: true,
+            selectedSquare: null,
+            validMoves: [],
+            gameOver: false,
+            winner: null // 'white', 'black', or 'draw'
+        };
+
+        let pendingMove = null; // {from, to, isWhite, piece}
+
+        function algebra(row, col) {
+            return `${String.fromCharCode(97 + col)}${8 - row}`;
+        }
+
+        function addPiece(row, col, type, isWhite) {
+            const key = `${row}_${col}`;
+            const mesh = createPieceMesh(type, isWhite);
+            const x = (col - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const z = (row - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            
+            // Start pieces just above the board so they settle quickly with gravity
+            const y = BOARD_SURFACE_Y + 0.3;
+            
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+
+            // Position body at same location as mesh
+            const rb = rapierWorld.createRigidBody(
+                RAPIER.RigidBodyDesc.dynamic()
+                    .setTranslation(x, y, z)
+                    .setCanSleep(true)
+                    .setLinearDamping(4.0)
+                    .setAngularDamping(4.0)
+                    .setCcdEnabled(true)
+            );
+
+            // Create exact convex hull collider - Rapier will use geometry as-is
+            const colliderDesc = createPieceCollider(mesh.geometry);
+            colliderDesc.setFriction(0.95).setRestitution(0.0);
+            rapierWorld.createCollider(colliderDesc, rb);
+            trackWireframe(rb, type, isWhite ? 0xffffff : 0x555555);
+
+            gameState.pieces[key] = { type, isWhite, mesh, body: rb, row, col, hasMoved: false };
+        }
+
+        function clearPieces() {
+            Object.values(gameState.pieces).forEach(p => {
+                scene.remove(p.mesh);
+                rapierWorld.removeRigidBody(p.body);
+                removeWireframe(p.body);
+            });
+            gameState.pieces = {};
+        }
+
+        function setupInitialPosition() {
+            clearPieces();
+            gameState.moveHistory = [];
+            gameState.isWhiteTurn = true;
+            gameState.selectedSquare = null;
+            gameState.validMoves = [];
+            gameState.gameOver = false;
+            gameState.winner = null;
+            lastCommittedBoardState = null;
+            promotionState = null;
+            promotionPending = false;
+            hidePromotionModal();
+
+            const backRank = ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'];
+            backRank.forEach((type, c) => addPiece(0, c, type, false));
+            for (let c = 0; c < 8; c++) addPiece(1, c, 'pawn', false);
+            for (let c = 0; c < 8; c++) addPiece(6, c, 'pawn', true);
+            backRank.forEach((type, c) => addPiece(7, c, type, true));
+            updateUI();
+            // Capture initial committed state
+            lastCommittedBoardState = getBoardState();
+            
+            // If AI is white (player is black), schedule AI's first move
+            if (gameMode.type === 'ai' && gameMode.playerColor === 'black') {
+                setTimeout(() => AI.makeMove(), 800);
+            }
+        }
+
+        function raycastSquare(evt) {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            mouse.x = (evt.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(evt.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(boardGroup.children);
+            if (!intersects.length) return null;
+            const { row, col } = intersects[0].object.userData;
+            return { row, col };
+        }
+
+        function movePiece(fromRow, fromCol, toRow, toCol, { record = true } = {}) {
+            const fromKey = `${fromRow}_${fromCol}`;
+            const toKey = `${toRow}_${toCol}`;
+            const piece = gameState.pieces[fromKey];
+            if (!piece) return false;
+
+            const target = gameState.pieces[toKey];
+            if (target) {
+                scene.remove(target.mesh);
+                rapierWorld.removeRigidBody(target.body);
+                removeWireframe(target.body);
+                delete gameState.pieces[toKey];
+            }
+
+            const x = (toCol - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const z = (toRow - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const y = BOARD_SURFACE_Y + 0.5;
+            
+            piece.mesh.position.set(x, y, z);
+            piece.body.setTranslation({ x, y, z }, true);
+            piece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            piece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+            piece.row = toRow;
+            piece.col = toCol;
+            piece.hasMoved = true;
+            delete gameState.pieces[fromKey];
+            gameState.pieces[toKey] = piece;
+
+            if (record) {
+                // Check if opponent is in check after this move
+                const newBoardState = getBoardState();
+                const opponentIsInCheck = AI.isKingInCheck(newBoardState, !piece.isWhite);
+                
+                gameState.moveHistory.push({ from: algebra(fromRow, fromCol), to: algebra(toRow, toCol), isWhite: piece.isWhite, piece: piece.type, isCapture: !!target, isCheck: opponentIsInCheck });
+                gameState.isWhiteTurn = !gameState.isWhiteTurn;
+                gameState.selectedSquare = null;
+                gameState.validMoves = [];
+                updateUI();
+            }
+            return true;
+        }
+
+        function formatChessNotation(move) {
+            // Convert move to standard chess notation
+            if (move.piece === 'castle') {
+                // Add checkmate/check notation to castle moves
+                const suffix = move.isCheckmate ? '#' : (move.isCheck ? '+' : '');
+                return `${move.notation}${suffix}`;
+            }
+            
+            const pieceSymbols = {
+                king: 'K',
+                queen: 'Q',
+                rook: 'R',
+                bishop: 'B',
+                knight: 'N',
+                pawn: ''
+            };
+            
+            const piece = pieceSymbols[move.piece] || '';
+            const capture = move.isCapture ? 'x' : '';
+            
+            // For pawn captures, include the file (column) of origin
+            if (move.piece === 'pawn' && move.isCapture) {
+                const fromFile = move.from.charAt(0);
+                const notation = `${fromFile}${capture}${move.to}`;
+                const suffix = move.isCheckmate ? '#' : (move.isCheck ? '+' : '');
+                return `${notation}${suffix}`;
+            }
+            
+            // Standard notation: Piece + capture + destination
+            const notation = `${piece}${capture}${move.to}`;
+            const suffix = move.isCheckmate ? '#' : (move.isCheck ? '+' : '');
+            return `${notation}${suffix}`;
+        }
+
+        function updateUI() {
+            // Update turn display or game over message
+            if (gameState.gameOver) {
+                let message = '';
+                if (gameState.winner === 'white') {
+                    message = 'White wins by checkmate!';
+                } else if (gameState.winner === 'black') {
+                    message = 'Black wins by checkmate!';
+                } else if (gameState.winner === 'draw') {
+                    message = 'Draw by stalemate';
+                }
+                document.getElementById('currentTurn').textContent = message;
+                document.getElementById('currentTurn').style.fontWeight = 'bold';
+                document.getElementById('currentTurn').style.color = '#4CAF50';
+            } else {
+                document.getElementById('currentTurn').textContent = gameState.isWhiteTurn ? 'White to move' : 'Black to move';
+                document.getElementById('currentTurn').style.fontWeight = 'normal';
+                document.getElementById('currentTurn').style.color = '';
+            }
+            
+            const historyDiv = document.getElementById('moveHistoryEntries');
+            historyDiv.innerHTML = '';
+            gameState.moveHistory.forEach((m, idx) => {
+                const entry = document.createElement('div');
+                entry.className = `move-entry ${m.isWhite ? 'white' : 'black'}`;
+                const notation = formatChessNotation(m);
+                const moveNumber = Math.floor(idx / 2) + 1;
+                entry.textContent = m.isWhite ? `${moveNumber}. ${notation}` : notation;
+                historyDiv.appendChild(entry);
+            });
+        }
+
+        // --- Drag control (same system as blackjack chips) ---
+        let DRAG_PLANE_Y = BOARD_SURFACE_Y + 0.8;
+        let DRAG_RISE_DURATION_MS = 400;
+        
+        // Create white X marker for dragged piece indicator
+        function createXMarker() {
+            const group = new THREE.Group();
+            const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+            
+            // First diagonal (\)
+            const geom1 = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-0.08, 0.001, -0.08),
+                new THREE.Vector3(0.08, 0.001, 0.08)
+            ]);
+            const line1 = new THREE.Line(geom1, material);
+            group.add(line1);
+            
+            // Second diagonal (/)
+            const geom2 = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(-0.08, 0.001, 0.08),
+                new THREE.Vector3(0.08, 0.001, -0.08)
+            ]);
+            const line2 = new THREE.Line(geom2, material);
+            group.add(line2);
+            
+            group.visible = false;
+            return group;
+        }
+        
+        const xMarker = createXMarker();
+        scene.add(xMarker);
+        
+        const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -DRAG_PLANE_Y);
+        const mouse = new THREE.Vector2();
+        const raycaster = new THREE.Raycaster();
+        const _dragPlaneIntersect = new THREE.Vector3();
+        const dragOffset = new THREE.Vector3();
+        let draggedPiece = null;
+        const snappingPieces = new Map(); // piece -> { start, end, startTime, duration }
+        const slidingOffPieces = new Map(); // piece -> { start, end, startTime, duration } for captured pieces
+        const capturedPieces = { white: [], black: [] }; // Track captured pieces by side
+        let lastHighlightedMoves = []; // Track which moves are captures
+        
+        // Camera state snapshot to protect against unwanted rotations
+        const cameraSnapshot = {
+            position: new THREE.Vector3(),
+            target: new THREE.Vector3(),
+            valid: false
+        };
+
+        const promotionAnimations = new Map(); // piece -> { startTime, duration, startScale, endScale }
+        let promotionState = null; // { pawn, targetNotation }
+        let promotionPending = false;
+
+        function getCapturedSlot(captureIndex, isWhite) {
+            const boardHalfWidth = (BOARD_SIZE * SQUARE_SIZE) / 2;
+            const col = Math.floor(captureIndex / 4); // new column every 4 pieces
+            const row = captureIndex % 4;
+            const finalX = boardHalfWidth + 0.35 + (col * 0.2);
+            const finalY = BOARD_SURFACE_Y -0.05;
+            const zDirection = isWhite ? -0.2 : 0.2;
+            const zBase = zDirection * (boardHalfWidth + 0.02);
+            const finalZ = zBase + (zDirection * (row * 0.65));
+            return { x: finalX, y: finalY, z: finalZ };
+        }
+
+        function positionCapturedPiece(piece, captureIndex) {
+            const slot = getCapturedSlot(captureIndex, piece.isWhite);
+            piece.mesh.position.set(slot.x, slot.y, slot.z);
+            piece.body.setTranslation({ x: slot.x, y: slot.y, z: slot.z }, true);
+            piece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            piece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        }
+
+        function reflowCapturedPieces(bucket) {
+            capturedPieces[bucket].forEach((piece, idx) => {
+                positionCapturedPiece(piece, idx);
+            });
+        }
+
+        function takeCapturedPiece(type, isWhite) {
+            const bucket = isWhite ? 'white' : 'black';
+            const idx = capturedPieces[bucket].findIndex(p => p.type === type);
+            if (idx === -1) return null;
+            const piece = capturedPieces[bucket].splice(idx, 1)[0];
+            slidingOffPieces.delete(piece);
+            reflowCapturedPieces(bucket);
+            return piece;
+        }
+
+        function isPawnPromotionSquare(piece) {
+            if (!piece || piece.type !== 'pawn') return false;
+            return (piece.isWhite && piece.row === 0) || (!piece.isWhite && piece.row === 7);
+        }
+
+        function applyPromotion(pawnPiece, newType) {
+            if (!pawnPiece || pawnPiece.type !== 'pawn') return pawnPiece;
+            promotionPending = false;
+            const row = pawnPiece.row;
+            const col = pawnPiece.col;
+            const key = `${row}_${col}`;
+
+            if (snappingPieces.has(pawnPiece)) {
+                snappingPieces.delete(pawnPiece);
+            }
+            delete pawnPiece.promotionPendingType;
+
+            scene.remove(pawnPiece.mesh);
+            rapierWorld.removeRigidBody(pawnPiece.body);
+            removeWireframe(pawnPiece.body);
+            delete gameState.pieces[key];
+
+            const resurrected = takeCapturedPiece(newType, pawnPiece.isWhite);
+            let promotedPiece;
+            if (resurrected) {
+                promotedPiece = resurrected;
+            } else {
+                addPiece(row, col, newType, pawnPiece.isWhite);
+                promotedPiece = gameState.pieces[key];
+            }
+
+            const targetX = (col - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const targetZ = (row - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+            const targetY = BOARD_SURFACE_Y + 0.5;
+            promotedPiece.mesh.position.set(targetX, targetY, targetZ);
+            promotedPiece.body.setTranslation({ x: targetX, y: targetY, z: targetZ }, true);
+            promotedPiece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            promotedPiece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            promotedPiece.body.setBodyType(RAPIER.RigidBodyType.Dynamic);
+            promotedPiece.row = row;
+            promotedPiece.col = col;
+            promotedPiece.hasMoved = true;
+            promotedPiece.mesh.scale.set(1, 1, 1);
+            gameState.pieces[key] = promotedPiece;
+
+            if (!resurrected) {
+                promotedPiece.mesh.scale.set(0.2, 0.2, 0.2);
+                promotionAnimations.set(promotedPiece, {
+                    startTime: performance.now(),
+                    duration: 350,
+                    startScale: 0.2,
+                    endScale: 1
+                });
+            }
+
+            return promotedPiece;
+        }
+
+        function queuePromotion(pawnPiece, newType) {
+            if (!pawnPiece) return;
+            promotionPending = true;
+            pawnPiece.promotionPendingType = newType;
+            if (!snappingPieces.has(pawnPiece)) {
+                applyPromotion(pawnPiece, newType);
+            }
+        }
+
+        function showPromotionModal(pawnPiece) {
+            promotionState = {
+                pawn: pawnPiece,
+                targetNotation: pawnPiece ? getPieceSquareNotation(pawnPiece) : null
+            };
+            const modal = document.getElementById('promotionModal');
+            modal.classList.add('active');
+        }
+
+        function hidePromotionModal() {
+            const modal = document.getElementById('promotionModal');
+            modal.classList.remove('active');
+        }
+
+        function handlePromotionChoice(newType) {
+            if (!promotionState || !promotionState.pawn) return;
+            const pawnPiece = promotionState.pawn;
+            const targetNotation = promotionState.targetNotation;
+            promotionState = null;
+            hidePromotionModal();
+            queuePromotion(pawnPiece, newType);
+            if (pendingMove && (!targetNotation || pendingMove.to === targetNotation)) {
+                pendingMove.piece = newType;
+                pendingMove.promotion = newType;
+            }
+        }
+
+        function capturePieceToZone(targetPiece, boardKey = null) {
+            if (!targetPiece) return;
+            // Remove from logical board mapping if provided
+            if (boardKey && gameState.pieces[boardKey] === targetPiece) {
+                delete gameState.pieces[boardKey];
+            }
+
+            // Track captured piece by side
+            const bucket = targetPiece.isWhite ? 'white' : 'black';
+            capturedPieces[bucket].push(targetPiece);
+            const captureIndex = capturedPieces[bucket].length - 1;
+
+            // Compute capture zone placement
+            const slot = getCapturedSlot(captureIndex, targetPiece.isWhite);
+            const finalX = slot.x;
+            const finalY = slot.y;
+            const finalZ = slot.z;
+
+            const intermediateY = DRAG_PLANE_Y + 1.5; // lift high first
+
+            // Animate piece off the board
+            targetPiece.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+            targetPiece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+            targetPiece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            slidingOffPieces.set(targetPiece, {
+                start: targetPiece.mesh.position.clone(),
+                up: new THREE.Vector3(targetPiece.mesh.position.x, intermediateY, targetPiece.mesh.position.z),
+                over: new THREE.Vector3(finalX, intermediateY, finalZ),
+                end: new THREE.Vector3(finalX, finalY, finalZ),
+                startTime: performance.now(),
+                duration: 1200
+            });
+        }
+        
+        // --- Chess AI Engine ---
+        const PIECE_VALUES = {
+            pawn: 100,
+            knight: 320,
+            bishop: 330,
+            rook: 500,
+            queen: 900,
+            king: 0
+        };
+
+        // Piece-square tables for position evaluation (white perspective)
+        const PAWN_TABLE = [
+            0, 0, 0, 0, 0, 0, 0, 0,
+            50, 50, 50, 50, 50, 50, 50, 50,
+            10, 10, 20, 30, 30, 20, 10, 10,
+            5, 5, 10, 25, 25, 10, 5, 5,
+            0, 0, 0, 20, 20, 0, 0, 0,
+            5, -5, -10, 0, 0, -10, -5, 5,
+            5, 10, 10, -20, -20, 10, 10, 5,
+            0, 0, 0, 0, 0, 0, 0, 0
+        ];
+
+        const KNIGHT_TABLE = [
+            -50, -40, -30, -30, -30, -30, -40, -50,
+            -40, -20, 0, 0, 0, 0, -20, -40,
+            -30, 0, 10, 15, 15, 10, 0, -30,
+            -30, 5, 15, 20, 20, 15, 5, -30,
+            -30, 0, 15, 20, 20, 15, 0, -30,
+            -30, 5, 10, 15, 15, 10, 5, -30,
+            -40, -20, 0, 5, 5, 0, -20, -40,
+            -50, -40, -30, -30, -30, -30, -40, -50
+        ];
+
+        const BISHOP_TABLE = [
+            -20, -10, -10, -10, -10, -10, -10, -20,
+            -10, 0, 0, 0, 0, 0, 0, -10,
+            -10, 0, 5, 10, 10, 5, 0, -10,
+            -10, 5, 5, 10, 10, 5, 5, -10,
+            -10, 0, 10, 10, 10, 10, 0, -10,
+            -10, 10, 10, 10, 10, 10, 10, -10,
+            -10, 5, 0, 0, 0, 0, 5, -10,
+            -20, -10, -10, -10, -10, -10, -10, -20
+        ];
+
+        const ROOK_TABLE = [
+            0, 0, 0, 0, 0, 0, 0, 0,
+            5, 10, 10, 10, 10, 10, 10, 5,
+            -5, 0, 0, 0, 0, 0, 0, -5,
+            -5, 0, 0, 0, 0, 0, 0, -5,
+            -5, 0, 0, 0, 0, 0, 0, -5,
+            -5, 0, 0, 0, 0, 0, 0, -5,
+            -5, 0, 0, 0, 0, 0, 0, -5,
+            0, 0, 0, 5, 5, 0, 0, 0
+        ];
+
+        const QUEEN_TABLE = [
+            -20, -10, -10, -5, -5, -10, -10, -20,
+            -10, 0, 0, 0, 0, 0, 0, -10,
+            -10, 0, 5, 5, 5, 5, 0, -10,
+            -5, 0, 5, 5, 5, 5, 0, -5,
+            0, 0, 5, 5, 5, 5, 0, -5,
+            -10, 5, 5, 5, 5, 5, 0, -10,
+            -10, 0, 5, 0, 0, 0, 0, -10,
+            -20, -10, -10, -5, -5, -10, -10, -20
+        ];
+
+        const KING_MIDGAME = [
+            -30, -40, -40, -50, -50, -40, -40, -30,
+            -30, -40, -40, -50, -50, -40, -40, -30,
+            -30, -40, -40, -50, -50, -40, -40, -30,
+            -30, -40, -40, -50, -50, -40, -40, -30,
+            -20, -30, -30, -40, -40, -30, -30, -20,
+            -10, -20, -20, -20, -20, -20, -20, -10,
+            20, 20, 0, 0, 0, 0, 20, 20,
+            20, 30, 10, 0, 0, 10, 30, 20
+        ];
+
+        function getPieceSquareValue(type, isWhite, row, col) {
+            // Convert row/col to index (0-63)
+            const idx = isWhite ? row * 8 + col : (7 - row) * 8 + (7 - col);
+            
+            const tables = {
+                pawn: PAWN_TABLE,
+                knight: KNIGHT_TABLE,
+                bishop: BISHOP_TABLE,
+                rook: ROOK_TABLE,
+                queen: QUEEN_TABLE,
+                king: KING_MIDGAME
+            };
+            
+            return (tables[type] || [])[idx] || 0;
+        }
+
+        const AI = {
+            transpositionTable: new Map(),
+            transpositionTableSize: 100000,
+            maxThinkTime: 5500, // Maximum 5.5 seconds per move (higher for stronger play)
+            searchStartTime: 0,
+
+            getSearchDepth() {
+                const elo = gameMode.aiElo;
+                // Increased depths for better play - iterative deepening scales with time
+                if (elo < 400) return 2;
+                if (elo < 800) return 3;
+                if (elo < 1000) return 4;
+                if (elo < 1200) return 5;  // Increased from 4 to 5 for better 1200 play
+                if (elo < 1400) return 5;
+                if (elo < 1600) return 6;
+                if (elo < 2000) return 6;
+                if (elo < 2400) return 7;
+                return 7;
+            },
+            
+            getQuiescenceDepth() {
+                const elo = gameMode.aiElo;
+                // Lower ELO stops tactical searches earlier; higher ELO sees deeper
+                if (elo < 400) return 1;   // Minimal tactical search
+                if (elo < 800) return 2;
+                if (elo < 1200) return 3;
+                if (elo < 1600) return 4;
+                if (elo < 2000) return 5;
+                if (elo < 2400) return 6;
+                return 8;                  // Strong engines go very deep in tactics
+            },
+            
+            getPositionalWeight() {
+                const elo = gameMode.aiElo;
+                // Lower ELO weights material more heavily; higher ELO values position
+                if (elo < 400) return 0.2;  // Almost pure material
+                if (elo < 800) return 0.3;
+                if (elo < 1200) return 0.4;
+                if (elo < 1600) return 0.5; // Balanced
+                if (elo < 2000) return 0.6;
+                if (elo < 2400) return 0.7;
+                return 0.8;                // Strong engines heavily value position
+            },
+            
+            getContemptFactor() {
+                const elo = gameMode.aiElo;
+                // Lower ELO slightly prefers draws; higher ELO seeks wins
+                if (elo < 400) return 60;   // Strong draw preference
+                if (elo < 800) return 40;
+                if (elo < 1200) return 20;
+                if (elo < 1600) return 5;   // Minimal draw preference
+                if (elo < 2400) return 0;   // No draw preference
+                return -10;                 // Slight win-seeking tendency
+            },
+            
+            shouldStopSearch() {
+                return (performance.now() - this.searchStartTime) > this.maxThinkTime;
+            },
+
+            // Hash position for transposition table
+            hashPosition(boardState) {
+                return JSON.stringify(
+                    Object.keys(boardState)
+                        .sort()
+                        .filter(k => boardState[k] && boardState[k].type)
+                        .map(k => k + ':' + boardState[k].type + boardState[k].isWhite)
+                );
+            },
+
+            // Advanced position evaluation
+            evaluatePosition(boardState) {
+                let score = 0;
+                let materialCount = 0;
+                
+                // Huge penalty if king is in check (this handles illegal positions during search)
+                if (this.isKingInCheck(boardState, true)) {
+                    score -= 3000; // Massive penalty for white king in check
+                }
+                if (this.isKingInCheck(boardState, false)) {
+                    score += 3000; // Massive bonus if black king in check
+                }
+                
+                // Get ELO-dependent weights
+                const positionalWeight = this.getPositionalWeight();
+                const contemptFactor = this.getContemptFactor();
+                
+                // Material and piece-square evaluation
+                for (let notation in boardState) {
+                    const { piece, isWhite, type } = boardState[notation];
+                    const { row, col } = boardSquares[notation];
+                    
+                    const materialValue = PIECE_VALUES[type] || 0;
+                    const posValue = getPieceSquareValue(type, isWhite, row, col);
+                    
+                    // Scale positional value based on ELO: lower ELO weights material more
+                    const weightedPosValue = posValue * positionalWeight;
+                    const totalValue = materialValue + weightedPosValue;
+                    score += isWhite ? totalValue : -totalValue;
+                    materialCount += materialValue;
+                }
+                
+                // King safety bonus/penalty
+                for (let notation in boardState) {
+                    const { piece, isWhite, type } = boardState[notation];
+                    if (type === 'king') {
+                        const { row, col } = boardSquares[notation];
+                        const kingSafety = this.evaluateKingSafety(boardState, isWhite, row, col);
+                        score += isWhite ? kingSafety : -kingSafety;
+                    }
+                }
+                
+                // Pawn structure evaluation
+                const pawnStructureScore = this.evaluatePawnStructure(boardState);
+                score += pawnStructureScore;
+                
+                // Mobility bonus (more moves available = better position)
+                const whiteMoves = this.getAllMoves(boardState, true).length;
+                const blackMoves = this.getAllMoves(boardState, false).length;
+                score += (whiteMoves - blackMoves) * 2;
+                
+                // Contempt factor: lower ELO prefers draws, higher ELO seeks wins
+                // Slight bonus if material is equal (draw tendency for lower ELO)
+                let whiteMaterial = 0, blackMaterial = 0;
+                for (let notation in boardState) {
+                    const val = PIECE_VALUES[boardState[notation].type] || 0;
+                    if (boardState[notation].isWhite) whiteMaterial += val;
+                    else blackMaterial += val;
+                }
+                if (Math.abs(whiteMaterial - blackMaterial) < 5) {
+                    score += contemptFactor; // Balanced position: lower ELO finds it safer
+                }
+                
+                return score;
+            },
+
+            evaluateKingSafety(boardState, isWhite, kRow, kCol) {
+                let safety = 0;
+                
+                // Castling bonus if king hasn't moved far
+                if ((isWhite && kRow === 7 && (kCol === 4 || kCol === 6)) ||
+                    (!isWhite && kRow === 0 && (kCol === 4 || kCol === 6))) {
+                    safety += 30;
+                }
+                
+                // Penalty for exposed king (no pawns nearby)
+                const nearbyRows = isWhite ? [6, 7] : [0, 1];
+                let pawnShield = 0;
+                for (let r of nearbyRows) {
+                    for (let c = Math.max(0, kCol - 1); c <= Math.min(7, kCol + 1); c++) {
+                        const key = `${r}_${c}`;
+                        const row = 8 - parseInt(Object.keys(boardSquares).find(n => boardSquares[n].row === r && boardSquares[n].col === c)?.split('')[1] || '0', 10);
+                        // Simplified pawn shield check
+                    }
+                }
+                
+                return safety;
+            },
+
+            evaluatePawnStructure(boardState) {
+                let score = 0;
+                
+                for (let notation in boardState) {
+                    const { piece, isWhite, type } = boardState[notation];
+                    if (type === 'pawn') {
+                        const { row, col } = boardSquares[notation];
+                        
+                        // Doubled pawns penalty
+                        for (let otherNotation in boardState) {
+                            const { piece: other, isWhite: otherIsWhite, type: otherType } = boardState[otherNotation];
+                            if (otherType === 'pawn' && otherIsWhite === isWhite && otherNotation !== notation) {
+                                const { col: otherCol } = boardSquares[otherNotation];
+                                if (col === otherCol) {
+                                    score += isWhite ? -20 : 20;
+                                }
+                            }
+                        }
+                        
+                        // Passed pawn bonus
+                        const isPassedPawn = this.isPassedPawn(boardState, notation, isWhite);
+                        if (isPassedPawn) {
+                            score += isWhite ? 30 : -30;
+                        }
+                    }
+                }
+                
+                return score;
+            },
+
+            isPassedPawn(boardState, notation, isWhite) {
+                const { row, col } = boardSquares[notation];
+                const direction = isWhite ? -1 : 1;
+                
+                for (let r = row + direction; (isWhite ? r >= 0 : r <= 7); r += direction) {
+                    for (let c = col - 1; c <= col + 1; c++) {
+                        if (c >= 0 && c <= 7) {
+                            const findNotation = Object.keys(boardSquares).find(n => boardSquares[n].row === r && boardSquares[n].col === c);
+                            if (findNotation && boardState[findNotation]) {
+                                const { type: otherType, isWhite: otherIsWhite } = boardState[findNotation];
+                                if (otherType === 'pawn' && otherIsWhite !== isWhite) {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+                return true;
+            },
+            
+            // Check if a king is under attack
+            isKingInCheck(boardState, isWhite) {
+                // Find the king
+                let kingNotation = null;
+                for (let notation in boardState) {
+                    const piece = boardState[notation];
+                    if (piece && piece.type === 'king' && piece.isWhite === isWhite) {
+                        kingNotation = notation;
+                        break;
+                    }
+                }
+                
+                if (!kingNotation) return false; // No king found
+                
+                const kingPos = squareToRowCol(kingNotation);
+                
+                // Check if any opponent piece can attack the king's square
+                for (let notation in boardState) {
+                    const piece = boardState[notation];
+                    if (piece && piece.isWhite !== isWhite) {
+                        const pseudoPiece = { isWhite: piece.isWhite, type: piece.type };
+                        const moves = getValidMoves(notation, pseudoPiece, boardState, false, true);
+                        for (let move of moves) {
+                            const moveNotation = typeof move === 'object' ? move.notation : move;
+                            if (moveNotation === kingNotation) {
+                                return true; // King is under attack
+                            }
+                        }
+                    }
+                }
+                
+                return false;
+            },
+            
+            // Check if a player is in checkmate (in check AND has no legal moves)
+            isCheckmate(boardState, isWhite) {
+                if (!this.isKingInCheck(boardState, isWhite)) return false; // Not in check
+                const legalMoves = this.getAllMoves(boardState, isWhite, true);
+                return legalMoves.length === 0; // No legal moves = checkmate
+            },
+            
+            // Check if a player is in stalemate (not in check AND has no legal moves)
+            isStalemate(boardState, isWhite) {
+                if (this.isKingInCheck(boardState, isWhite)) return false; // In check, not stalemate
+                const legalMoves = this.getAllMoves(boardState, isWhite, true);
+                return legalMoves.length === 0; // No legal moves but not in check = stalemate
+            },
+            
+            // Filter out moves that leave the king in check
+            filterLegalMoves(boardState, moves, isWhite) {
+                return moves.filter(move => {
+                    let newState = boardState;
+                    
+                    // If it's a castle move, simulate both king and rook movement
+                    if (move.isCastle) {
+                        // Use simulateMove with the castle flag to handle it properly
+                        newState = this.simulateMove(boardState, move.from, move.to, move.isCastle);
+                    } else {
+                        // Regular move simulation
+                        newState = this.simulateMove(boardState, move.from, move.to);
+                    }
+                    
+                    // Check if this move leaves our king in check
+                    return !this.isKingInCheck(newState, isWhite);
+                });
+            },
+
+            getAllMoves(boardState, isWhite, filterIllegal = true) {
+                const moves = [];
+                for (let notation in boardState) {
+                    const entry = boardState[notation];
+                    const pieceIsWhite = entry.isWhite;
+                    if (pieceIsWhite === isWhite) {
+                        // Provide a minimal piece-like object for move generation
+                        const pseudoPiece = { isWhite: entry.isWhite, type: entry.type };
+                        const validMoves = getValidMoves(notation, pseudoPiece, boardState);
+                        validMoves.forEach(move => {
+                            const moveNotation = typeof move === 'object' ? move.notation : move;
+                            // Preserve castle info if present
+                            const moveObj = { from: notation, to: moveNotation };
+                            if (move.isCastle) {
+                                moveObj.isCastle = move.isCastle;
+                            }
+                            moves.push(moveObj);
+                        });
+                    }
+                }
+                // Only filter illegal moves when explicitly requested (at root level)
+                if (filterIllegal) {
+                    return this.filterLegalMoves(boardState, moves, isWhite);
+                }
+                return moves;
+            },
+
+            simulateMove(boardState, from, to, isCastle = null) {
+                const newState = JSON.parse(JSON.stringify(boardState));
+                
+                // Handle castling moves
+                if (isCastle) {
+                    const piece = newState[from];
+                    if (piece && piece.type === 'king') {
+                        const isKingside = isCastle === 'kingside';
+                        const expectedRow = piece.isWhite ? 7 : 0;
+                        
+                        // Move king
+                        const kingDestCol = isKingside ? 6 : 2;
+                        const kingDest = rowColToSquare(expectedRow, kingDestCol);
+                        newState[kingDest] = newState[from];
+                        delete newState[from];
+                        
+                        // Move rook
+                        const rookFromCol = isKingside ? 7 : 0;
+                        const rookDestCol = isKingside ? 5 : 3;
+                        const rookFrom = rowColToSquare(expectedRow, rookFromCol);
+                        const rookDest = rowColToSquare(expectedRow, rookDestCol);
+                        newState[rookDest] = newState[rookFrom];
+                        delete newState[rookFrom];
+                    }
+                } else {
+                    // Regular move simulation
+                    if (newState[to]) delete newState[to]; // Capture
+                    if (newState[from]) {
+                        newState[to] = newState[from];
+                        delete newState[from];
+                    }
+                }
+                
+                return newState;
+            },
+            
+            // Quiescence search - continue searching captures to avoid missing tactics
+            quiescence(boardState, isMaximizing, alpha, beta, depth = 0) {
+                // Evaluate current position first
+                const eval0 = this.evaluatePosition(boardState);
+                if (isMaximizing) {
+                    if (eval0 >= beta) return beta;
+                    alpha = Math.max(alpha, eval0);
+                } else {
+                    if (eval0 <= alpha) return alpha;
+                    beta = Math.min(beta, eval0);
+                }
+                
+                // Stop quiescence search at depth limit for lower ELO
+                const maxQuiescenceDepth = this.getQuiescenceDepth();
+                if (depth >= maxQuiescenceDepth) return eval0;
+                
+                // Only search captures (forcing moves)
+                const moves = this.getAllMoves(boardState, isMaximizing, false);
+                const captures = moves.filter(m => boardState[m.to]); // Only captures
+                
+                if (captures.length === 0) return eval0;
+                
+                // Sort captures by piece value
+                captures.sort((a, b) => {
+                    const captureA = boardState[a.to] ? PIECE_VALUES[boardState[a.to].type] || 0 : 0;
+                    const captureB = boardState[b.to] ? PIECE_VALUES[boardState[b.to].type] || 0 : 0;
+                    return captureB - captureA;
+                });
+                
+                if (isMaximizing) {
+                    let maxEval = eval0;
+                    for (let move of captures) {
+                        if (this.shouldStopSearch()) break;
+                        const newState = this.simulateMove(boardState, move.from, move.to, move.isCastle);
+                        const evalScore = this.quiescence(newState, false, alpha, beta, depth + 1);
+                        maxEval = Math.max(maxEval, evalScore);
+                        alpha = Math.max(alpha, evalScore);
+                        if (beta <= alpha) break;
+                    }
+                    return maxEval;
+                } else {
+                    let minEval = eval0;
+                    for (let move of captures) {
+                        if (this.shouldStopSearch()) break;
+                        const newState = this.simulateMove(boardState, move.from, move.to, move.isCastle);
+                        const evalScore = this.quiescence(newState, true, alpha, beta, depth + 1);
+                        minEval = Math.min(minEval, evalScore);
+                        beta = Math.min(beta, evalScore);
+                        if (beta <= alpha) break;
+                    }
+                    return minEval;
+                }
+            },
+
+            minimax(boardState, depth, isMaximizing, alpha = -Infinity, beta = Infinity) {
+                // Early termination if time limit exceeded
+                if (this.shouldStopSearch()) {
+                    return this.evaluatePosition(boardState);
+                }
+                
+                const hash = this.hashPosition(boardState);
+                if (this.transpositionTable.has(hash)) {
+                    const cached = this.transpositionTable.get(hash);
+                    if (cached.depth >= depth) {
+                        return cached.score;
+                    }
+                }
+
+                if (depth === 0) {
+                    // At leaf nodes, use quiescence search to see forcing moves
+                    const evalScore = this.quiescence(boardState, isMaximizing, -Infinity, Infinity);
+                    this.transpositionTable.set(hash, { score: evalScore, depth });
+                    if (this.transpositionTable.size > this.transpositionTableSize) {
+                        this.transpositionTable.clear();
+                    }
+                    return evalScore;
+                }
+
+                // Use pseudo-legal moves during search (much faster)
+                const moves = this.getAllMoves(boardState, isMaximizing, false);
+                
+                if (moves.length === 0) {
+                    return isMaximizing ? -5000 : 5000;
+                }
+
+                // Improved move ordering: captures (sorted by value), checks, center control, pawn advancement
+                moves.sort((a, b) => {
+                    // Captures are highest priority
+                    const captureA = boardState[a.to] ? PIECE_VALUES[boardState[a.to].type] || 0 : 0;
+                    const captureB = boardState[b.to] ? PIECE_VALUES[boardState[b.to].type] || 0 : 0;
+                    if (captureB !== captureA) return captureB - captureA;
+                    
+                    // Check if moves deliver check
+                    const newStateA = this.simulateMove(boardState, a.from, a.to, a.isCastle);
+                    const newStateB = this.simulateMove(boardState, b.from, b.to, b.isCastle);
+                    const checkA = this.isKingInCheck(newStateA, !isMaximizing) ? 500 : 0;
+                    const checkB = this.isKingInCheck(newStateB, !isMaximizing) ? 500 : 0;
+                    if (checkB !== checkA) return checkB - checkA;
+                    
+                    // Prefer center squares
+                    const toA = squareToRowCol(a.to);
+                    const toB = squareToRowCol(b.to);
+                    const centerDistA = Math.abs(toA.row - 3.5) + Math.abs(toA.col - 3.5);
+                    const centerDistB = Math.abs(toB.row - 3.5) + Math.abs(toB.col - 3.5);
+                    if (centerDistB !== centerDistA) return centerDistA - centerDistB;
+                    
+                    // Pawn advancement bonus
+                    const pieceA = boardState[a.from];
+                    const pieceB = boardState[b.from];
+                    let advanceA = 0, advanceB = 0;
+                    if (pieceA?.type === 'pawn') {
+                        advanceA = pieceA.isWhite ? (7 - toA.row) : toA.row;
+                    }
+                    if (pieceB?.type === 'pawn') {
+                        advanceB = pieceB.isWhite ? (7 - toB.row) : toB.row;
+                    }
+                    return advanceB - advanceA;
+                });
+
+                if (isMaximizing) {
+                    let maxEval = -Infinity;
+                    for (let move of moves) {
+                        const newState = this.simulateMove(boardState, move.from, move.to, move.isCastle);
+                        const evalScore = this.minimax(newState, depth - 1, false, alpha, beta);
+                        maxEval = Math.max(maxEval, evalScore);
+                        alpha = Math.max(alpha, evalScore);
+                        if (beta <= alpha) break;
+                    }
+                    this.transpositionTable.set(hash, { score: maxEval, depth });
+                    return maxEval;
+                } else {
+                    let minEval = Infinity;
+                    for (let move of moves) {
+                        const newState = this.simulateMove(boardState, move.from, move.to, move.isCastle);
+                        const evalScore = this.minimax(newState, depth - 1, true, alpha, beta);
+                        minEval = Math.min(minEval, evalScore);
+                        beta = Math.min(beta, evalScore);
+                        if (beta <= alpha) break;
+                    }
+                    this.transpositionTable.set(hash, { score: minEval, depth });
+                    return minEval;
+                }
+            },
+
+            selectMove(boardState, isWhite) {
+                // Start timer for time-based cutoff
+                this.searchStartTime = performance.now();
+                
+                // Only filter for legal moves at the root level (filterIllegal = true by default)
+                const moves = this.getAllMoves(boardState, isWhite, true);
+                if (moves.length === 0) return null;
+
+                const maxDepth = this.getSearchDepth();
+                let bestMove = moves[0];
+                let bestEval = isWhite ? -Infinity : Infinity;
+
+                // Blunder chance scales with ELO - reduced for 1200+ to make them competent
+                const blunderChance = Math.max(0, 1 - gameMode.aiElo / 2600);
+                const willBlunder = Math.random() < blunderChance;
+
+                // If blundering, only consider worst moves; otherwise consider all
+                const movesToConsider = willBlunder ? 
+                    moves.slice().sort(() => Math.random() - 0.5).slice(0, Math.max(1, Math.floor(moves.length / 4))) : 
+                    moves;
+
+                // Iterative deepening: search progressively deeper until time runs out
+                for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
+                    if (this.shouldStopSearch()) break; // Stop if time limit reached
+                    
+                    let depthBestMove = bestMove;
+                    let depthBestEval = isWhite ? -Infinity : Infinity;
+                    
+                    for (let move of movesToConsider) {
+                        if (this.shouldStopSearch()) break; // Early exit if time runs out
+                        
+                        const newState = this.simulateMove(boardState, move.from, move.to);
+                        const evalScore = this.minimax(newState, currentDepth - 1, !isWhite);
+
+                        if (isWhite) {
+                            if (evalScore > depthBestEval) {
+                                depthBestEval = evalScore;
+                                depthBestMove = move;
+                            }
+                        } else {
+                            if (evalScore < depthBestEval) {
+                                depthBestEval = evalScore;
+                                depthBestMove = move;
+                            }
+                        }
+                    }
+                    
+                    // Update best move if we completed the depth
+                    if (!this.shouldStopSearch()) {
+                        bestMove = depthBestMove;
+                        bestEval = depthBestEval;
+                    }
+                }
+
+                return bestMove;
+            },
+
+            makeMove() {
+                if (gameMode.type !== 'ai') return;
+
+                const isAiWhite = gameMode.playerColor !== 'white';
+                if (gameState.isWhiteTurn !== isAiWhite) {
+                    console.warn('[AI] Not my turn', { isAiWhite, isWhiteTurn: gameState.isWhiteTurn });
+                    return;
+                }
+
+                const boardState = getBoardState();
+                const move = this.selectMove(boardState, isAiWhite);
+
+                if (!move) {
+                    console.warn('[AI] No legal moves found');
+                    return;
+                }
+
+                console.log('[AI] Selected move', move);
+
+                const { from, to } = move;
+                const { row: fromRow, col: fromCol } = squareToRowCol(from);
+                const { row: toRow, col: toCol } = squareToRowCol(to);
+
+                const fromKey = `${fromRow}_${fromCol}`;
+                const toKey = `${toRow}_${toCol}`;
+                let piece = gameState.pieces[fromKey];
+                if (!piece) {
+                    console.error('[AI] Missing piece at fromKey', { fromKey, move });
+                    console.error('[AI] Current gameState.pieces keys:', Object.keys(gameState.pieces));
+                    console.error('[AI] Move attempted:', move);
+                    console.error('[AI] Available board state:', getBoardState());
+                    return;
+                }
+
+                // Use the previous console algorithm for check detection (simulate move first)
+                const boardStateBeforeMove = getBoardState();
+                const simulated = this.simulateMove(boardStateBeforeMove, from, to, move.isCastle);
+                const promotionType = (piece.type === 'pawn' && ((piece.isWhite && toRow === 0) || (!piece.isWhite && toRow === 7)))
+                    ? 'queen'
+                    : null;
+                const simulatedForCheck = promotionType && simulated[to]
+                    ? { ...simulated, [to]: { ...simulated[to], type: promotionType } }
+                    : simulated;
+                const simulatedCheck = AI.isKingInCheck(simulatedForCheck, !piece.isWhite);
+                
+                // Check if this is a castle move
+                if (move.isCastle) {
+                    const expectedRow = piece.isWhite ? 7 : 0;
+                    const rookCol = move.isCastle === 'kingside' ? 7 : 0;
+                    const rookKey = `${expectedRow}_${rookCol}`;
+                    const rook = gameState.pieces[rookKey];
+                    
+                    if (rook) {
+                        executeCastle(piece, rook);
+                        // Record castle notation in history and check for checkmate/stalemate
+                        const castleNotation = move.isCastle === 'kingside' ? 'O-O' : 'O-O-O';
+                        const finalBoardState = getBoardState();
+                        const opponentColor = !piece.isWhite;
+                        const castleIsCheck = simulatedCheck;
+                        const castleIsCheckmate = AI.isCheckmate(finalBoardState, opponentColor);
+                        const castleIsStalemate = AI.isStalemate(finalBoardState, opponentColor);
+                        const castleMove = { from, to, isWhite: piece.isWhite, piece: 'castle', isCapture: false, isCastle: move.isCastle, notation: castleNotation, isCheck: castleIsCheck, isCheckmate: castleIsCheckmate };
+                        gameState.moveHistory.push(castleMove);
+                        const aiSide = piece.isWhite ? 'White' : 'Black';
+                        const checkSuffix = castleIsCheckmate ? '#' : (castleIsCheck ? '+' : '');
+                        console.log(`[AI] ${aiSide} Selected move > {castle from: '${from}', to: '${to}'}${checkSuffix}`);
+                        console.log('[AI] Castle move recorded to history:', castleMove);
+                        gameState.isWhiteTurn = !gameState.isWhiteTurn;
+                        lastCommittedBoardState = getBoardState();
+                        
+                        // Check for game over
+                        if (castleIsCheckmate) {
+                            gameState.gameOver = true;
+                            gameState.winner = piece.isWhite ? 'white' : 'black';
+                            console.log(`[AI] Checkmate! ${gameState.winner} wins!`);
+                        } else if (castleIsStalemate) {
+                            gameState.gameOver = true;
+                            gameState.winner = 'draw';
+                            console.log('[AI] Stalemate! Game is a draw.');
+                        }
+                        
+                        updateUI();
+                    }
+                    return;
+                }
+
+                // Handle capture with same slide-off animation as player
+                const target = gameState.pieces[toKey];
+                if (target) {
+                    // Safety check: never capture the king (this should never happen with correct move gen)
+                    if (target.type === 'king') {
+                        console.error('[AI] CRITICAL: Attempted to capture king! Move rejected.', { from, to, target });
+                        return;
+                    }
+                    capturePieceToZone(target, toKey);
+                }
+
+                // Smooth three-phase animation for AI move (lift -> slide -> drop)
+                const targetX = (toCol - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                const targetZ = (toRow - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                const targetY = BOARD_SURFACE_Y + 0.5;
+
+                const startPos = piece.mesh.position.clone();
+                const liftY = Math.max(startPos.y, targetY) + 1.2; // lift above board and current height
+                const mid1 = new THREE.Vector3(startPos.x, liftY, startPos.z);
+                const mid2 = new THREE.Vector3(targetX, liftY, targetZ);
+                const endPos = new THREE.Vector3(targetX, targetY, targetZ);
+
+                piece.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+                piece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                piece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+                snappingPieces.set(piece, {
+                    mode: 'aiThreePhase',
+                    start: startPos,
+                    mid1,
+                    mid2,
+                    end: endPos,
+                    startTime: performance.now(),
+                    durUp: 200,
+                    durFlat: 250,
+                    durDown: 200
+                });
+
+                piece.row = toRow;
+                piece.col = toCol;
+                piece.hasMoved = true;
+                delete gameState.pieces[fromKey];
+                gameState.pieces[toKey] = piece;
+
+                if (promotionType) {
+                    piece.promotionPendingType = promotionType;
+                    if (!snappingPieces.has(piece)) {
+                        piece = applyPromotion(piece, promotionType);
+                    }
+                }
+
+                // Check if opponent is in check/checkmate/stalemate after this move
+                const newBoardState = getBoardState();
+                const opponentColor = !piece.isWhite;
+                const boardForOutcome = (promotionType && newBoardState[to] && newBoardState[to].type !== promotionType)
+                    ? { ...newBoardState, [to]: { ...newBoardState[to], type: promotionType } }
+                    : newBoardState;
+                const opponentIsInCheck = simulatedCheck;
+                const opponentIsCheckmate = AI.isCheckmate(boardForOutcome, opponentColor);
+                const opponentIsStalemate = AI.isStalemate(boardForOutcome, opponentColor);
+
+                const recordedPieceType = promotionType || piece.type;
+                
+                const moveToRecord = { from, to, isWhite: piece.isWhite, piece: recordedPieceType, isCapture: !!target, isCheck: opponentIsInCheck, isCheckmate: opponentIsCheckmate, promotion: promotionType || undefined };
+                gameState.moveHistory.push(moveToRecord);
+                const aiSide = piece.isWhite ? 'White' : 'Black';
+                const checkSuffix = opponentIsCheckmate ? '#' : (opponentIsInCheck ? '+' : '');
+                console.log(`[AI] ${aiSide} Selected move > {${recordedPieceType} from: '${from}', to: '${to}'}${checkSuffix}`);
+                console.log('[AI] Move recorded to history:', moveToRecord);
+                lastCommittedBoardState = getBoardState();
+                gameState.isWhiteTurn = !gameState.isWhiteTurn;
+                
+                // Check for game over
+                if (opponentIsCheckmate) {
+                    gameState.gameOver = true;
+                    gameState.winner = piece.isWhite ? 'white' : 'black';
+                    console.log(`[AI] Checkmate! ${gameState.winner} wins!`);
+                } else if (opponentIsStalemate) {
+                    gameState.gameOver = true;
+                    gameState.winner = 'draw';
+                    console.log('[AI] Stalemate! Game is a draw.');
+                }
+                
+                updateUI();
+            }
+        };
+        
+        function easeOutCubic(t) {
+            t = Math.min(Math.max(t, 0), 1);
+            return 1 - Math.pow(1 - t, 3);
+        }
+        
+        function updateMousePosition(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        }
+        
+        function getPieceUnderMouse() {
+            raycaster.setFromCamera(mouse, camera);
+            const pieceMeshes = Object.values(gameState.pieces).map(p => p.mesh);
+            const intersects = raycaster.intersectObjects(pieceMeshes, false);
+            
+            if (intersects.length > 0) {
+                const hitObject = intersects[0].object;
+                for (let key in gameState.pieces) {
+                    const piece = gameState.pieces[key];
+                    if (piece.mesh === hitObject) {
+                        return { piece, key };
+                    }
+                }
+            }
+            return null;
+        }
+        
+        function updateDraggedPiecePosition() {
+            if (!draggedPiece) return;
+            raycaster.setFromCamera(mouse, camera);
+            if (raycaster.ray.intersectPlane(dragPlane, _dragPlaneIntersect)) {
+                const { piece } = draggedPiece;
+                const targetY = DRAG_PLANE_Y;
+                let yNow = targetY;
+                
+                if (piece.dragAnim) {
+                    const now = performance.now();
+                    const d = piece.dragAnim.duration || DRAG_RISE_DURATION_MS;
+                    const t = (now - piece.dragAnim.startTime) / Math.max(1, d);
+                    const k = easeOutCubic(t);
+                    yNow = piece.dragAnim.startY + (targetY - piece.dragAnim.startY) * k;
+                    
+                    // Animate rotation to upright
+                    const uprightQuat = new THREE.Quaternion(); // Identity = upright
+                    piece.mesh.quaternion.slerpQuaternions(piece.dragAnim.startQuat, uprightQuat, k);
+                    piece.body.setNextKinematicRotation(piece.mesh.quaternion);
+                    
+                    if (t >= 1) piece.dragAnim = null;
+                }
+                
+                const newPos = _dragPlaneIntersect.clone().add(dragOffset);
+                newPos.y = yNow;
+                piece.body.setNextKinematicTranslation({ x: newPos.x, y: newPos.y, z: newPos.z });
+                piece.mesh.position.set(newPos.x, newPos.y, newPos.z);
+                
+                // Update X marker position on board surface directly under piece
+                xMarker.position.set(piece.mesh.position.x, BOARD_SURFACE_Y, piece.mesh.position.z);
+            }
+        }
+        
+        function onMouseDown(event) {
+            if (event.button !== 0) return; // Only left click
+            if (gameState.gameOver) return; // Don't allow moves after game is over
+            if (promotionState || promotionPending) return; // Wait for promotion choice
+            
+            updateMousePosition(event);
+            const result = getPieceUnderMouse();
+            
+            if (result) {
+                draggedPiece = result;
+                const { piece } = result;
+                piece.isDragging = true;
+                piece.didCapture = false;  // Track if capture was performed during this drag
+                piece.startNotation = getPieceSquareNotation(piece);
+                
+                // Snapshot camera state to protect against unwanted rotations during right-click
+                cameraSnapshot.position.copy(camera.position);
+                cameraSnapshot.target.copy(controls.target);
+                cameraSnapshot.valid = true;
+                
+                // Make piece kinematic while dragging
+                piece.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+                piece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                piece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                
+                // Start rise animation from current height
+                piece.dragAnim = { 
+                    startTime: performance.now(), 
+                    startY: piece.mesh.position.y,
+                    startQuat: piece.mesh.quaternion.clone(),
+                    duration: DRAG_RISE_DURATION_MS 
+                };
+                
+                // Calculate drag offset immediately from current mouse position
+                raycaster.setFromCamera(mouse, camera);
+                if (raycaster.ray.intersectPlane(dragPlane, _dragPlaneIntersect)) {
+                    dragOffset.copy(piece.mesh.position).sub(_dragPlaneIntersect);
+                    // Trigger an initial update so it starts rising on click
+                    updateDraggedPiecePosition();
+                    xMarker.visible = true;
+                }
+                
+                // Get valid moves and highlight squares
+                const currentSquare = getPieceSquareNotation(piece);
+                if (currentSquare) {
+                    const boardState = getBoardState();
+                    const validMoveNotations = getValidMoves(currentSquare, piece, boardState);
+                    const castleTarget = getCastleTarget(piece);
+                    highlightSquares(validMoveNotations, castleTarget);
+                }
+                
+                controls.enabled = false; // Disable camera controls while dragging
+            }
+        }
+        
+        function onMouseMove(event) {
+            updateMousePosition(event);
+            
+            // If right-click was just pressed and we're dragging, save camera state
+            // to detect if it changed unexpectedly
+            if (draggedPiece && event.buttons === 1) {
+                // Only left button pressed (not right), this is normal drag
+            }
+        }
+
+        function onMouseDownCapture(event) {
+            // Detect right-click (button 2) while dragging for capture or castle
+            if (event.button !== 2) return; // Only right click
+            
+            if (!draggedPiece) return; // Only during drag
+            
+            // Prevent context menu from appearing during drag
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Find which square is currently under the piece
+            const currentSquare = getPieceSquareNotation(draggedPiece.piece);
+            if (!currentSquare) return;
+
+            // Check if this square is a castle target
+            const square = Array.from(boardGroup.children).find(s => s.userData.notation === currentSquare);
+            if (square && square.userData.isCastle) {
+                // The castle target is the piece at the castleNotation square
+                const { row, col } = squareToRowCol(currentSquare);
+                const targetKey = `${row}_${col}`;
+                const targetPiece = gameState.pieces[targetKey];
+                
+                // The dragged piece and target piece: one is king, one is rook
+                const draggedPiece_ = draggedPiece.piece;
+                
+                // Determine which is king and which is rook
+                let king, rook;
+                if (draggedPiece_.type === 'king') {
+                    king = draggedPiece_;
+                    rook = targetPiece;
+                } else {
+                    king = targetPiece;
+                    rook = draggedPiece_;
+                }
+                
+                // Mark as castle for onMouseUp to execute
+                draggedPiece_.isCastleMove = true;
+                draggedPiece_.castleKing = king;
+                draggedPiece_.castleRook = rook;
+                return;
+            }
+
+            // Check if this square is a capture target
+            const move = lastHighlightedMoves.find(m => {
+                const notation = typeof m === 'string' ? m : m.notation;
+                return notation === currentSquare && (typeof m === 'object' ? m.isCapture : false);
+            });
+
+            if (!move || !move.isCapture) return; // Not a capture square
+
+            // Find and capture the piece on this square
+            const { row, col } = squareToRowCol(currentSquare);
+            const key = `${row}_${col}`;
+            let targetPiece = gameState.pieces[key];
+            
+            // Handle en passant - if no piece on destination but it's a pawn capture, 
+            // the captured pawn is on an adjacent square (one row back in direction of opponent)
+            if (!targetPiece && draggedPiece.piece.type === 'pawn') {
+                const draggedFromRow = squareToRowCol(draggedPiece.piece.startNotation).row;
+                const draggedFromCol = squareToRowCol(draggedPiece.piece.startNotation).col;
+                
+                // En passant target is on the same rank as the pawn's starting position
+                // If moving down (increasing row), captured pawn is at current row - 1
+                // If moving up (decreasing row), captured pawn is at current row + 1
+                const capturedPawnRow = draggedFromRow < row ? row - 1 : row + 1;
+                const capturedPawnKey = `${capturedPawnRow}_${col}`;
+                targetPiece = gameState.pieces[capturedPawnKey];
+                
+                if (targetPiece && targetPiece.isWhite !== draggedPiece.piece.isWhite) {
+                    draggedPiece.piece.didCapture = true;
+                    draggedPiece.piece.captureTargetPiece = targetPiece;
+                    draggedPiece.piece.captureTargetKey = capturedPawnKey;
+                    return;
+                }
+            }
+
+            if (targetPiece && targetPiece !== draggedPiece.piece && targetPiece.isWhite !== draggedPiece.piece.isWhite) {
+                draggedPiece.piece.didCapture = true;  // Mark that a capture occurred
+                draggedPiece.piece.captureTargetPiece = targetPiece;
+                draggedPiece.piece.captureTargetKey = key;
+            }
+            // DO NOT clear drag state here - let onMouseUp handle it naturally
+        }
+        
+        function onMouseUp(event) {
+            if (draggedPiece) {
+                const { piece } = draggedPiece;
+                
+                // Check if this was a castle move (marked in onMouseDownCapture)
+                if (piece.isCastleMove && piece.castleKing && piece.castleRook) {
+                    executeCastle(piece.castleKing, piece.castleRook);
+                    piece.isCastleMove = false;
+                    piece.castleKing = null;
+                    piece.castleRook = null;
+                    
+                    // Clear drag state and highlights
+                    piece.dragAnim = null;
+                    piece.isDragging = false;
+                    draggedPiece = null;
+                    clearHighlights();
+                    xMarker.visible = false;
+                    piece.didCapture = false;
+                    // Drag ended; stop protecting camera state
+                    cameraSnapshot.valid = false;
+                    
+                    // Castle animation handles its own physics, so just return
+                    return;
+                }
+                // Check if this was a capture move (marked in onMouseDownCapture)
+                else if (piece.didCapture && piece.captureTargetPiece) {
+                    capturePieceToZone(piece.captureTargetPiece, piece.captureTargetKey);
+                    piece.captureTargetPiece = null;
+                    piece.captureTargetKey = null;
+                }
+                
+                // Clear drag animation state
+                piece.dragAnim = null;
+                piece.isDragging = false;
+                draggedPiece = null;
+                
+                // Clear highlights and marker
+                clearHighlights();
+                xMarker.visible = false;
+                
+                // DO NOT re-enable controls yet - wait until snapping/sliding are done
+                // controls will be re-enabled once animations complete
+
+                // Snap and record pending move
+                const fromNotation = piece.startNotation;
+                const toNotation = getPieceSquareNotation(piece);
+                let snapStarted = false;
+                if (fromNotation && toNotation) {
+                    const { row: fromRow, col: fromCol } = squareToRowCol(fromNotation);
+                    const { row: toRow, col: toCol } = squareToRowCol(toNotation);
+                    if (fromNotation !== toNotation) {
+                        // Update logical board mapping without physically teleporting
+                        const fromKey = `${fromRow}_${fromCol}`;
+                        const toKey = `${toRow}_${toCol}`;
+                        
+                        // Check if there's a piece at destination BEFORE we move
+                        const wasCapture = !!gameState.pieces[toKey] || piece.didCapture;
+                        
+                        delete gameState.pieces[fromKey];
+                        gameState.pieces[toKey] = piece;
+                        piece.row = toRow;
+                        piece.col = toCol;
+
+                        // Prepare smooth snap animation to square center
+                        const targetX = (toCol - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                        const targetZ = (toRow - BOARD_SIZE / 2) * SQUARE_SIZE + SQUARE_SIZE / 2;
+                        const targetY = BOARD_SURFACE_Y + 0.5;
+                        piece.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+                        piece.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                        piece.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                        snappingPieces.set(piece, {
+                            start: piece.mesh.position.clone(),
+                            end: new THREE.Vector3(targetX, targetY, targetZ),
+                            startTime: performance.now(),
+                            duration: 250
+                        });
+                        snapStarted = true;
+
+                        // wasCapture was already determined before moving the piece
+                        pendingMove = { from: fromNotation, to: toNotation, isWhite: piece.isWhite, piece: piece.type, isCapture: wasCapture };
+                        if (isPawnPromotionSquare(piece)) {
+                            showPromotionModal(piece);
+                        }
+                    }
+                }
+
+                // If we didn't start a snap animation, restore dynamic body now
+                if (!snapStarted) {
+                    piece.body.setBodyType(RAPIER.RigidBodyType.Dynamic);
+                    piece.body.wakeUp();
+                    // No animations pending; re-enable controls immediately
+                    if (snappingPieces.size === 0 && slidingOffPieces.size === 0) {
+                        controls.enabled = true;
+                    }
+                }
+                
+                // Reset capture/castle flags for next move
+                piece.didCapture = false;
+                // Drag ended; stop protecting camera state
+                cameraSnapshot.valid = false;
+                
+                // Safety: if no animations are running at all, ensure controls are enabled
+                if (!snapStarted && snappingPieces.size === 0 && slidingOffPieces.size === 0) {
+                    controls.enabled = true;
+                }
+            }
+        }
+        
+        renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+        renderer.domElement.addEventListener('mousedown', onMouseDownCapture, false);
+        renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+        renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+        renderer.domElement.addEventListener('mouseleave', onMouseUp, false);
+        
+        // Prevent context menu from showing during piece drag - use capture phase and document level
+        document.addEventListener('contextmenu', (event) => {
+            // If we're dragging or if the target is the canvas, prevent context menu
+            if (draggedPiece || event.target === renderer.domElement || event.target.closest('canvas')) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+            }
+        }, true); // Use capture phase to intercept early
+
+        // --- Game Mode Selection UI ---
+        function showModeSelection() {
+            const modal = document.getElementById('gameModeModal');
+            const modeButtons = document.getElementById('modeButtons');
+            modeButtons.innerHTML = `
+                <button class="mode-btn" id="twoPlayerBtn">2 Player</button>
+                <button class="mode-btn" id="vsAiBtn">vs AI</button>
+            `;
+            modal.classList.add('active');
+            
+            document.getElementById('twoPlayerBtn').addEventListener('click', () => {
+                gameMode.type = '2player';
+                gameMode.playerColor = null;
+                modal.classList.remove('active');
+                capturedPieces.white = [];
+                capturedPieces.black = [];
+                slidingOffPieces.clear();
+                setupInitialPosition();
+            });
+            
+            document.getElementById('vsAiBtn').addEventListener('click', () => {
+                showAiConfiguration();
+            });
+        }
+
+        function showAiConfiguration() {
+            const modal = document.getElementById('gameModeModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+            
+            modalTitle.textContent = 'AI Configuration';
+            modalBody.innerHTML = `
+                <div class="elo-container">
+                    <p>Select AI ELO (800 - 2800)</p>
+                    <input type="range" id="eloSlider" min="100" max="3200" value="1200" step="50">
+                    <p id="eloDisplay">ELO: 1200</p>
+                </div>
+                <button class="mode-btn" id="confirmEloBtn">Next</button>
+            `;
+            
+            const eloSlider = document.getElementById('eloSlider');
+            const eloDisplay = document.getElementById('eloDisplay');
+            eloSlider.addEventListener('input', () => {
+                eloDisplay.textContent = `ELO: ${eloSlider.value}`;
+            });
+            
+            document.getElementById('confirmEloBtn').addEventListener('click', () => {
+                gameMode.aiElo = parseInt(eloSlider.value);
+                showColorSelection();
+            });
+        }
+
+        function showColorSelection() {
+            const modal = document.getElementById('gameModeModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+            
+            modalTitle.textContent = 'Choose Your Color';
+            modalBody.innerHTML = `
+                <div class="color-buttons">
+                    <button class="color-btn white" id="whiteBtn">White</button>
+                    <button class="color-btn black" id="blackBtn">Black</button>
+                    <button class="color-btn" id="randomBtn">Random</button>
+                </div>
+            `;
+            
+            document.getElementById('whiteBtn').addEventListener('click', () => {
+                gameMode.type = 'ai';
+                gameMode.playerColor = 'white';
+                modal.classList.remove('active');
+                capturedPieces.white = [];
+                capturedPieces.black = [];
+                slidingOffPieces.clear();
+                setupInitialPosition();
+            });
+            
+            document.getElementById('blackBtn').addEventListener('click', () => {
+                gameMode.type = 'ai';
+                gameMode.playerColor = 'black';
+                modal.classList.remove('active');
+                capturedPieces.white = [];
+                capturedPieces.black = [];
+                slidingOffPieces.clear();
+                setupInitialPosition();
+            });
+            
+            document.getElementById('randomBtn').addEventListener('click', () => {
+                gameMode.type = 'ai';
+                gameMode.playerColor = Math.random() < 0.5 ? 'white' : 'black';
+                modal.classList.remove('active');
+                capturedPieces.white = [];
+                capturedPieces.black = [];
+                slidingOffPieces.clear();
+                setupInitialPosition();
+            });
+        }
+
+        document.querySelectorAll('#promotionModal [data-piece]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                handlePromotionChoice(btn.dataset.piece);
+            });
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            showModeSelection();
+        });
+
+        document.getElementById('undoBtn').addEventListener('click', () => {
+            if (!gameState.moveHistory.length) return;
+            pendingMove = null;
+            promotionState = null;
+            promotionPending = false;
+            hidePromotionModal();
+            capturedPieces.white = [];
+            capturedPieces.black = [];
+            slidingOffPieces.clear();
+            const history = [...gameState.moveHistory];
+            history.pop();
+            setupInitialPosition();
+            history.forEach((move, idx) => {
+                const fromRow = 8 - parseInt(move.from[1], 10);
+                const fromCol = move.from.charCodeAt(0) - 97;
+                const toRow = 8 - parseInt(move.to[1], 10);
+                const toCol = move.to.charCodeAt(0) - 97;
+                movePiece(fromRow, fromCol, toRow, toCol, { record: false });
+                if (move.promotion) {
+                    const key = `${toRow}_${toCol}`;
+                    const pawn = gameState.pieces[key];
+                    if (pawn && pawn.type === 'pawn') {
+                        applyPromotion(pawn, move.promotion);
+                    }
+                }
+                gameState.moveHistory.push(move);
+                gameState.isWhiteTurn = (idx % 2) === 1; // white starts
+            });
+            gameState.isWhiteTurn = history.length % 2 === 0;
+            updateUI();
+            lastCommittedBoardState = getBoardState();
+        });
+
+        document.getElementById('endTurnBtn').addEventListener('click', () => {
+            // Don't allow ending turn if game is over
+            if (gameState.gameOver) {
+                console.log('[END TURN] Game is over, cannot end turn');
+                return;
+            }
+            if (promotionState || promotionPending) {
+                console.log('[END TURN] Promotion pending, choose a piece first');
+                return;
+            }
+            
+            // Fallback: if pendingMove went missing, try to reconstruct from board diff
+            if (!pendingMove && lastCommittedBoardState) {
+                const currentState = getBoardState();
+                const missing = Object.keys(lastCommittedBoardState).filter(k => !currentState[k]);
+                const added = Object.keys(currentState).filter(k => !lastCommittedBoardState[k]);
+                if (missing.length === 1 && added.length === 1) {
+                    const movedPiece = currentState[added[0]];
+                    pendingMove = { from: missing[0], to: added[0], isWhite: movedPiece.isWhite, piece: movedPiece.type };
+                    console.log('[END TURN] Reconstructed pendingMove', pendingMove);
+                }
+            }
+
+            if (!pendingMove) {
+                console.warn('[END TURN] No pendingMove; aborting end turn');
+                return;
+            }
+            
+            // Check if opponent is in check/checkmate/stalemate
+            const finalBoardState = getBoardState();
+            const opponentColor = !pendingMove.isWhite;
+            const opponentIsInCheck = AI.isKingInCheck(finalBoardState, opponentColor);
+            const opponentIsCheckmate = AI.isCheckmate(finalBoardState, opponentColor);
+            const opponentIsStalemate = AI.isStalemate(finalBoardState, opponentColor);
+            pendingMove.isCheck = opponentIsInCheck;
+            pendingMove.isCheckmate = opponentIsCheckmate;
+            
+            // Log player move with piece type and check notation
+            const playerSide = pendingMove.isWhite ? 'White' : 'Black';
+            const playerCheckNotation = opponentIsCheckmate ? '#' : (opponentIsInCheck ? '+' : '');
+            console.log(`[Player] ${playerSide} Selected move > {${pendingMove.piece} from: '${pendingMove.from}', to: '${pendingMove.to}'}${playerCheckNotation}`);
+            console.log('[Player] Move recorded to history:', pendingMove);
+            
+            gameState.moveHistory.push(pendingMove);
+            lastCommittedBoardState = getBoardState();
+            gameState.isWhiteTurn = !gameState.isWhiteTurn;
+            pendingMove = null;
+            
+            // Check for game over
+            if (opponentIsCheckmate) {
+                gameState.gameOver = true;
+                gameState.winner = !opponentColor ? 'white' : 'black';
+                console.log(`[Player] Checkmate! ${gameState.winner} wins!`);
+            } else if (opponentIsStalemate) {
+                gameState.gameOver = true;
+                gameState.winner = 'draw';
+                console.log('[Player] Stalemate! Game is a draw.');
+            }
+            
+            updateUI();
+            
+            // If AI mode and game not over, schedule AI move after a delay
+            if (gameMode.type === 'ai' && !gameState.gameOver) {
+                setTimeout(() => {
+                    console.log('[END TURN] Invoking AI.makeMove after delay');
+                    AI.makeMove();
+                }, 800); // 800ms delay for better UX
+            }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Pulse highlight effect
+            const pulseIntensity = 0.3 + Math.sin(performance.now() / 500) * 0.2;
+            highlightMaterial.emissiveIntensity = pulseIntensity;
+            
+            // Update dragged piece position on every frame
+            if (draggedPiece) {
+                updateDraggedPiecePosition();
+            }
+            // Animate snapping pieces into square centers
+            const now = performance.now();
+            snappingPieces.forEach((anim, piece) => {
+                if (anim.mode === 'aiThreePhase') {
+                    const total = (anim.durUp || 0) + (anim.durFlat || 0) + (anim.durDown || 0);
+                    const elapsed = now - anim.startTime;
+                    let pos;
+
+                    if (elapsed <= anim.durUp) {
+                        const k = easeOutCubic(elapsed / Math.max(1, anim.durUp));
+                        pos = new THREE.Vector3().lerpVectors(anim.start, anim.mid1, k);
+                    } else if (elapsed <= anim.durUp + anim.durFlat) {
+                        const tFlat = (elapsed - anim.durUp) / Math.max(1, anim.durFlat);
+                        const k = easeOutCubic(tFlat);
+                        pos = new THREE.Vector3().lerpVectors(anim.mid1, anim.mid2, k);
+                    } else if (elapsed <= total) {
+                        const tDown = (elapsed - anim.durUp - anim.durFlat) / Math.max(1, anim.durDown);
+                        const k = easeOutCubic(tDown);
+                        pos = new THREE.Vector3().lerpVectors(anim.mid2, anim.end, k);
+                    } else {
+                        pos = anim.end.clone();
+                    }
+
+                    piece.body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
+                    piece.mesh.position.copy(pos);
+
+                    if (elapsed >= total) {
+                        piece.body.setBodyType(RAPIER.RigidBodyType.Dynamic);
+                        piece.body.wakeUp();
+                        snappingPieces.delete(piece);
+                        if (piece.promotionPendingType) {
+                            const promotionType = piece.promotionPendingType;
+                            applyPromotion(piece, promotionType);
+                        }
+                        // Re-enable controls if both snapping and sliding are now complete
+                        if (snappingPieces.size === 0 && slidingOffPieces.size === 0) {
+                            controls.enabled = true;
+                        }
+                    }
+                } else {
+                    const t = Math.min((now - anim.startTime) / Math.max(1, anim.duration), 1);
+                    const k = easeOutCubic(t);
+                    const pos = new THREE.Vector3().lerpVectors(anim.start, anim.end, k);
+                    piece.body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
+                    piece.mesh.position.copy(pos);
+                    if (t >= 1) {
+                        piece.body.setBodyType(RAPIER.RigidBodyType.Dynamic);
+                        piece.body.wakeUp();
+                        snappingPieces.delete(piece);
+                        if (piece.promotionPendingType) {
+                            const promotionType = piece.promotionPendingType;
+                            applyPromotion(piece, promotionType);
+                        }
+                        // Re-enable controls if both snapping and sliding are now complete
+                        if (snappingPieces.size === 0 && slidingOffPieces.size === 0) {
+                            controls.enabled = true;
+                        }
+                    }
+                }
+            });
+
+            // Animate captured pieces sliding off the board
+            slidingOffPieces.forEach((anim, piece) => {
+                const t = Math.min((now - anim.startTime) / Math.max(1, anim.duration), 1);
+                
+                // Three-stage animation: start -> up -> over -> end
+                let pos;
+                if (t < 0.33) {
+                    const t1 = t / 0.33; // 0 to 1
+                    const k = easeOutCubic(t1);
+                    pos = new THREE.Vector3().lerpVectors(anim.start, anim.up, k);
+                } else if (t < 0.66) {
+                    const t2 = (t - 0.33) / 0.33; // 0 to 1
+                    const k = easeOutCubic(t2);
+                    pos = new THREE.Vector3().lerpVectors(anim.up, anim.over, k);
+                } else {
+                    const t3 = (t - 0.66) / 0.34; // 0 to 1
+                    const k = easeOutCubic(t3);
+                    pos = new THREE.Vector3().lerpVectors(anim.over, anim.end, k);
+                }
+                
+                piece.body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
+                piece.mesh.position.copy(pos);
+                if (t >= 1) {
+                    piece.mesh.scale.set(0.6, 0.6, 0.6); // Make smaller once settled
+                    piece.body.setBodyType(RAPIER.RigidBodyType.Dynamic);
+                    piece.body.wakeUp();
+                    slidingOffPieces.delete(piece);
+                    // Re-enable controls if both snapping and sliding are now complete
+                    if (snappingPieces.size === 0 && slidingOffPieces.size === 0) {
+                        controls.enabled = true;
+                    }
+                }
+            });
+
+            promotionAnimations.forEach((anim, piece) => {
+                const t = Math.min((now - anim.startTime) / Math.max(1, anim.duration), 1);
+                const k = easeOutCubic(t);
+                const scale = anim.startScale + (anim.endScale - anim.startScale) * k;
+                piece.mesh.scale.set(scale, scale, scale);
+                if (t >= 1) {
+                    piece.mesh.scale.set(anim.endScale, anim.endScale, anim.endScale);
+                    promotionAnimations.delete(piece);
+                }
+            });
+            
+            rapierWorld.step();
+            Object.values(gameState.pieces).forEach(p => {
+                const t = p.body.translation();
+                const r = p.body.rotation();
+                p.mesh.position.set(t.x, t.y, t.z);
+                p.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+            });
+            bodyWireframes.forEach(({ rb, line }) => {
+                const t = rb.translation();
+                const r = rb.rotation();
+                line.position.set(t.x, t.y, t.z);
+                line.quaternion.set(r.x, r.y, r.z, r.w);
+            });
+            
+            // Restore camera state if we're dragging (protects against unexpected right-click rotations)
+            if (draggedPiece && cameraSnapshot.valid) {
+                camera.position.copy(cameraSnapshot.position);
+                controls.target.copy(cameraSnapshot.target);
+            }
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Debug GUI
+        const gui = new GUI();
+        gui.add(wireframeState, 'showPhysicsWireframes').name('Physics Wireframes').onChange((v) => {
+            bodyWireframes.forEach(({ line }) => { line.visible = v; });
+        });
+        gui.add(wireframeState, 'showAxes').name('Show Axes').onChange((v) => { axes.visible = v; });
+        gui.add(wireframeState, 'showGrid').name('Show Grid').onChange((v) => { grid.visible = v; });
+
+        // Start game mode selection on page load
+        showModeSelection();
+        animate();
+    </script>
+</body>
+</html>

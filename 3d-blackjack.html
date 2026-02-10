@@ -1,0 +1,4083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D Blackjack - Justin M. Perez</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+            background: #1a1a1a;
+        }
+
+        #c {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+
+        nav a {
+            color: white;
+            margin-right: 14px;
+            text-decoration: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            background: rgba(255,255,255,0.1);
+        }
+
+        .game-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+
+        .game-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: background 0.2s;
+        }
+
+        .game-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .game-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .game-btn.primary {
+            background: rgba(46, 204, 113, 0.8);
+        }
+
+        .game-btn.primary:hover {
+            background: rgba(46, 204, 113, 1);
+        }
+
+        .game-btn.danger {
+            background: rgba(231, 76, 60, 0.8);
+        }
+
+        .game-btn.danger:hover {
+            background: rgba(231, 76, 60, 1);
+        }
+
+        .game-info {
+            position: fixed;
+            top: 60px;
+            left: 10px;
+            z-index: 100;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .game-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+
+        .game-info .score {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+
+        .game-info .dealer-score {
+            color: #e74c3c;
+        }
+
+        .game-info .player-score {
+            color: #2ecc71;
+        }
+
+        /* Hand history panel */
+        .hand-history {
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            z-index: 100;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            font-size: 13px;
+            line-height: 1.4;
+            max-width: 200px;
+        }
+        .hand-history h3 { margin: 0 0 8px 0; font-size: 16px; }
+        .hand-history .entry { opacity: 0.85; margin-bottom: 6px; }
+        .hand-history .entry.win { color: #2ecc71; }
+        .hand-history .entry.loss { color: #e74c3c; }
+        .hand-history .entry.push { color: #f1c40f; }
+        .hand-history .entry.blackjack { text-shadow: 0 0 6px #f39c12; }
+        .hand-history .label { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="./index.html">Home</a>
+        <a href="./projects.html">Projects</a>
+        <a href="./resume.pdf" class="btn">Resume</a>
+    </nav>
+
+    <div class="game-info">
+        <h3>Blackjack</h3>
+        <div>Dealer: <span class="score dealer-score" id="dealerScore">0</span></div>
+        <div>Player: <span class="score player-score" id="playerScore">0</span></div>
+        <div style="margin-top: 10px;">Current Bet: <span class="score" id="currentBet" style="color: #f39c12;">$0</span></div>
+        <div id="gameStatus" style="margin-top: 10px; font-weight: bold;"></div>
+    </div>
+
+    <div class="hand-history" id="handHistory">
+        <h3>Recent Hands</h3>
+        <div id="handHistoryEntries"></div>
+    </div>
+
+    <canvas id="c"></canvas>
+    
+    <div class="game-controls">
+        <button id="dealBtn" class="game-btn primary">Deal</button>
+        <button id="hitBtn" class="game-btn" disabled>Hit</button>
+        <button id="standBtn" class="game-btn" disabled>Stand</button>
+    </div>
+
+    <script type="module">
+        // Import cannon-es as ES module
+        import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm';
+        // Make it globally available
+        window.CANNON = CANNON;
+    </script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three/three.module.js",
+        "three/addons/": "./lib/three/",
+        "lil-gui": "./lib/lil-gui/lil-gui.esm.js"
+      }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/OrbitControls.js';
+        import GUI from 'lil-gui';
+
+        // --- Real-world scaling helpers ---
+        // Straight dealer-side width of our table in scene units (see createBlackjackTableShape)
+        const TABLE_WIDTH_UNITS = 10.4;
+        // Approx real blackjack table dealer-side width in meters (~83")
+        const REAL_TABLE_WIDTH_M = 2.1;
+        // Scene unit in meters
+        const UNIT_IN_METERS = REAL_TABLE_WIDTH_M / TABLE_WIDTH_UNITS;
+
+        // Standard casino card dimensions (meters)
+        const CARD_REAL = { length: 0.0889, width: 0.0635, thickness: 0.0003 };
+        // Derived card dimensions in scene units
+        const CARD = {
+            length: CARD_REAL.length / UNIT_IN_METERS,
+            width: CARD_REAL.width / UNIT_IN_METERS,
+            // Use a visual minimum thickness to avoid z-fighting while staying plausible
+            thickness: Math.max(CARD_REAL.thickness / UNIT_IN_METERS, 0.0015)
+        };
+        // Horizontal spacing between cards when fanning a hand
+        const CARD_SPACING = CARD.width * 1.2;
+
+        // Standard casino chip dimensions (39mm diameter, 3mm thick in real world)
+        const CHIP_REAL = { diameter: 0.039, thickness: 0.003 };
+        const CHIP = {
+            radius: (CHIP_REAL.diameter / 2) / UNIT_IN_METERS,
+            thickness: CHIP_REAL.thickness / UNIT_IN_METERS
+        };
+        
+        // Chip denominations with colors
+        const CHIP_TYPES = {
+            1: { color: 0xf0f0f0, edgeColor: 0xd0d0d0, label: '$1' },
+            5: { color: 0xcc2222, edgeColor: 0x991111, label: '$5' },
+            25: { color: 0x22bb22, edgeColor: 0x118811, label: '$25' },
+            100: { color: 0x111111, edgeColor: 0x333333, label: '$100' },
+            500: { color: 0x8822cc, edgeColor: 0x551188, label: '$500' }
+        };
+
+        // Global vertical adjustment so we can nudge the whole table up/down
+        // Negative values lower the table relative to world y=0 (grid plane)
+    const TABLE_Y_SHIFT = -0.13; // small nudge down for visual table body only
+    // Canonical felt top Y (physics surface): x–z plane at y=0
+    const FELT_TOP_Y = 0;
+    // Drag plane height (defaults to felt). Update via setDragPlaneHeight(y).
+        let DRAG_PLANE_Y = 0.2;
+        // Duration in ms for chip to gently rise to the drag plane
+        let DRAG_RISE_DURATION_MS = 500;
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(0, 6, 8);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: document.getElementById('c'),
+            antialias: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Anisotropy caps and current setting for card textures
+        const MAX_ANISO = (renderer.capabilities.getMaxAnisotropy
+            ? renderer.capabilities.getMaxAnisotropy()
+            : (renderer.capabilities.maxAnisotropy || 1));
+        let CARD_TEXTURE_ANISO = MAX_ANISO; // default to maximum supported
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 4;
+        controls.maxDistance = 20;
+        controls.maxPolarAngle = Math.PI / 2.1;
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xfff4e6, 0.5);
+        scene.add(ambientLight);
+
+    // --- Debug helpers: axes and wireframe plane on x-y at y=0 ---
+    const axes = new THREE.AxesHelper(5);
+    axes.visible = false; // hidden by default in man cave
+    scene.add(axes);
+
+    // Grid on x-z plane at y=0 to visualize table placement
+    const grid = new THREE.GridHelper(30, 30, 0x00aaff, 0x334455);
+    grid.material.opacity = 0.35;
+    grid.material.transparent = true;
+    grid.visible = false; // hidden by default in man cave
+    scene.add(grid);
+
+    // --- Man Cave Room ---
+    const roomGroup = new THREE.Group();
+    
+    // Room dimensions (scaled to table; table is ~10 units wide, typical ceiling ~2.4-2.7m real)
+    const ROOM = {
+        width: 24,
+        depth: 18,
+        height: 12,          // increased from 8 to 12 for more realistic proportions
+        wallThickness: 0.3,
+        wainscotHeight: 2.6,
+        floorY: -3.65,       // aligned with table base
+        ceilingY: 8.35       // 12 units above floor
+    };
+    
+    // Materials
+    const floorMat = new THREE.MeshStandardMaterial({ 
+        color: 0xc9b89a, 
+        roughness: 0.8, 
+        metalness: 0.0 
+    });
+    
+    // Upper walls - lighter charcoal with subtle texture variation
+    const wallUpperMat = new THREE.MeshStandardMaterial({ 
+        color: 0x3a3a3a,  // lighter than before (was 0x2a2a2a)
+        roughness: 0.85, 
+        metalness: 0.0,
+        flatShading: false
+    });
+    
+    // Wood paneling - richer tone with more variation
+    const woodPanelMat = new THREE.MeshStandardMaterial({ 
+        color: 0x4a3520,  // slightly warmer brown
+        roughness: 0.65, 
+        metalness: 0.05 
+    });
+    
+    const ceilingMat = new THREE.MeshStandardMaterial({ 
+        color: 0xe8dcc8, 
+        roughness: 0.9, 
+        metalness: 0.0 
+    });
+    
+    const trimMat = new THREE.MeshStandardMaterial({ 
+        color: 0x5a4738,  // slightly lighter trim for contrast
+        roughness: 0.5, 
+        metalness: 0.2 
+    });
+    
+    // Floor
+    const floor = new THREE.Mesh(
+        new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth),
+        floorMat
+    );
+    floor.position.set(0, ROOM.floorY, 0);
+    floor.receiveShadow = true;
+    roomGroup.add(floor);
+    
+    // Ceiling
+    const ceiling = new THREE.Mesh(
+        new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth),
+        ceilingMat
+    );
+    ceiling.position.set(0, ROOM.ceilingY, 0);
+    ceiling.receiveShadow = true;
+    roomGroup.add(ceiling);
+    
+    // Helper to create wall with wainscot
+    function createWallWithWainscot(w, h, x, y, z, rotY) {
+        const wallGroup = new THREE.Group();
+        
+        // Lower wood panel (wainscot)
+        const wainscot = new THREE.Mesh(
+            new THREE.BoxGeometry(w, ROOM.wainscotHeight, ROOM.wallThickness),
+            woodPanelMat
+        );
+        wainscot.position.set(0, ROOM.wainscotHeight/2 + ROOM.floorY + 0.1, 0);
+        wainscot.castShadow = true;
+        wainscot.receiveShadow = true;
+        wallGroup.add(wainscot);
+        
+        // Add vertical wood panel lines for texture (reduced density for performance)
+        const panelLineCount = Math.floor(w / 1.2); // increased spacing from 0.8 to 1.2
+        const panelLineMat = new THREE.MeshStandardMaterial({ 
+            color: 0x332211, 
+            roughness: 0.7, 
+            metalness: 0.05 
+        });
+        for (let i = 0; i < panelLineCount; i++) {
+            const lineX = -w/2 + (i + 0.5) * (w / panelLineCount);
+            const line = new THREE.Mesh(
+                new THREE.BoxGeometry(0.02, ROOM.wainscotHeight, ROOM.wallThickness + 0.02),
+                panelLineMat
+            );
+            line.position.set(lineX, ROOM.wainscotHeight/2 + ROOM.floorY + 0.1, 0.01);
+            line.castShadow = false; // disable shadow casting on decorative lines
+            line.receiveShadow = false;
+            wallGroup.add(line);
+        }
+        
+        // Upper wall (dark paint)
+        const upperH = h - ROOM.wainscotHeight - 0.3;
+        const upper = new THREE.Mesh(
+            new THREE.BoxGeometry(w, upperH, ROOM.wallThickness),
+            wallUpperMat
+        );
+        upper.position.set(0, ROOM.wainscotHeight + upperH/2 + ROOM.floorY + 0.1, 0);
+        upper.castShadow = true;
+        upper.receiveShadow = true;
+        wallGroup.add(upper);
+        
+        // Crown molding at top
+        const crown = new THREE.Mesh(
+            new THREE.BoxGeometry(w, 0.12, ROOM.wallThickness + 0.08),
+            trimMat
+        );
+        crown.position.set(0, ROOM.ceilingY - 0.1, 0);
+        crown.castShadow = true;
+        wallGroup.add(crown);
+        
+        // Baseboard at bottom
+        const baseboard = new THREE.Mesh(
+            new THREE.BoxGeometry(w, 0.15, ROOM.wallThickness + 0.06),
+            trimMat
+        );
+        baseboard.position.set(0, ROOM.floorY + 0.075, 0);
+        baseboard.castShadow = true;
+        wallGroup.add(baseboard);
+        
+        wallGroup.position.set(x, y, z);
+        wallGroup.rotation.y = rotY;
+        return wallGroup;
+    }
+    
+    // Back wall (behind dealer)
+    const roomBackWall = createWallWithWainscot(
+        ROOM.width, 
+        ROOM.height, 
+        0, 
+        0, 
+        -ROOM.depth/2,
+        0
+    );
+    roomGroup.add(roomBackWall);
+    
+    // Front wall (behind player) - mostly open for camera but with side segments
+    const frontLeftWall = createWallWithWainscot(
+        ROOM.width * 0.25,
+        ROOM.height,
+        -ROOM.width/2 + ROOM.width * 0.125,
+        0,
+        ROOM.depth/2,
+        0
+    );
+    roomGroup.add(frontLeftWall);
+    
+    const frontRightWall = createWallWithWainscot(
+        ROOM.width * 0.25,
+        ROOM.height,
+        ROOM.width/2 - ROOM.width * 0.125,
+        0,
+        ROOM.depth/2,
+        0
+    );
+    roomGroup.add(frontRightWall);
+    
+    // Left wall with windows
+    const leftWallWidth = ROOM.depth;
+    const roomLeftWall = createWallWithWainscot(
+        leftWallWidth,
+        ROOM.height,
+        -ROOM.width/2,
+        0,
+        0,
+        Math.PI/2
+    );
+    roomGroup.add(roomLeftWall);
+    
+    // Right wall with windows
+    const roomRightWall = createWallWithWainscot(
+        leftWallWidth,
+        ROOM.height,
+        ROOM.width/2,
+        0,
+        0,
+        Math.PI/2
+    );
+    roomGroup.add(roomRightWall);
+    
+    // Single large central ceiling light - wide angle to light entire room
+    const mainCeilingLight = new THREE.SpotLight(0xfff4e6, 12, 40, Math.PI * 0.85, 0.25, 1.5);
+    mainCeilingLight.position.set(0, ROOM.ceilingY - 0.2, 0);
+    mainCeilingLight.castShadow = true;
+    mainCeilingLight.shadow.mapSize.width = 1024; // reduced from 2048 for better performance
+    mainCeilingLight.shadow.mapSize.height = 1024;
+    mainCeilingLight.shadow.camera.near = 0.5;
+    mainCeilingLight.shadow.camera.far = 40;
+    mainCeilingLight.shadow.camera.fov = 110;
+    mainCeilingLight.shadow.bias = -0.0001;
+    mainCeilingLight.shadow.radius = 2; // soften shadows with blur instead of high resolution
+    
+    const lightTarget = new THREE.Object3D();
+    lightTarget.position.set(0, 0, 0);
+    scene.add(lightTarget);
+    mainCeilingLight.target = lightTarget;
+    roomGroup.add(mainCeilingLight);
+    
+    // Large ceiling fixture/ring for the main light
+    const mainFixture = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.6, 0.7, 0.15, 16), // reduced segments from 32 to 16
+        new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.7 })
+    );
+    mainFixture.position.set(0, ROOM.ceilingY - 0.08, 0);
+    mainFixture.rotation.x = Math.PI;
+    mainFixture.castShadow = false; // decorative element doesn't need to cast shadow
+    roomGroup.add(mainFixture);
+    
+    // Visible light bulb (emissive sphere)
+    const lightBulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 16, 12), // reduced segments from 24,16
+        new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            emissive: 0xfff4e6, 
+            emissiveIntensity: 5.0,
+            roughness: 0.2,
+            metalness: 0.1
+        })
+    );
+    lightBulb.position.set(0, ROOM.ceilingY - 0.4, 0);
+    roomGroup.add(lightBulb);
+    
+    // Built-in shelving on back wall
+    function createShelf(width, depth, x, y, z) {
+        const shelfGroup = new THREE.Group();
+        
+        // Main shelf surface
+        const shelf = new THREE.Mesh(
+            new THREE.BoxGeometry(width, 0.08, depth),
+            woodPanelMat
+        );
+        shelf.position.set(0, 0, 0);
+        shelf.castShadow = true;
+        shelf.receiveShadow = true;
+        shelfGroup.add(shelf);
+        
+        // Back support strip (against wall)
+        const backSupport = new THREE.Mesh(
+            new THREE.BoxGeometry(width, 0.12, 0.1),
+            trimMat
+        );
+        backSupport.position.set(0, 0, -depth/2 + 0.05);
+        backSupport.castShadow = true;
+        backSupport.receiveShadow = true;
+        shelfGroup.add(backSupport);
+        
+        // Side supports (vertical brackets)
+        const sideSupport1 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.08, 0.3, depth * 0.7),
+            trimMat
+        );
+        sideSupport1.position.set(-width/2 + 0.15, -0.15, 0);
+        sideSupport1.castShadow = true;
+        sideSupport1.receiveShadow = true;
+        shelfGroup.add(sideSupport1);
+        
+        const sideSupport2 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.08, 0.3, depth * 0.7),
+            trimMat
+        );
+        sideSupport2.position.set(width/2 - 0.15, -0.15, 0);
+        sideSupport2.castShadow = true;
+        sideSupport2.receiveShadow = true;
+        shelfGroup.add(sideSupport2);
+        
+        shelfGroup.position.set(x, y, z);
+        return shelfGroup;
+    }
+    
+    // Left bookcase section
+    const shelfDepth = 0.8;
+    const shelfY1 = ROOM.wainscotHeight + 0.8 + ROOM.floorY;
+    const shelfY2 = shelfY1 + 1.2;
+    const shelfY3 = shelfY2 + 1.2;
+    
+    roomGroup.add(createShelf(3.5, shelfDepth, -7, shelfY1, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+    roomGroup.add(createShelf(3.5, shelfDepth, -7, shelfY2, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+    roomGroup.add(createShelf(3.5, shelfDepth, -7, shelfY3, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+    
+    // Right shelf section
+    roomGroup.add(createShelf(3.5, shelfDepth, 7, shelfY1, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+    roomGroup.add(createShelf(3.5, shelfDepth, 7, shelfY2, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+    roomGroup.add(createShelf(3.5, shelfDepth, 7, shelfY3, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+    
+    // Simple book blocks on shelves
+    function addBook(width, height, depth, x, y, z, colorHex) {
+        const book = new THREE.Mesh(
+            new THREE.BoxGeometry(width, height, depth),
+            new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 })
+        );
+        book.position.set(x, y, z);
+        book.castShadow = true;
+        book.receiveShadow = true;
+        roomGroup.add(book);
+    }
+    
+    // Left shelf books
+    const bookZ = -ROOM.depth/2 + 0.5;
+    addBook(0.15, 0.5, 0.3, -8.2, shelfY1 + 0.29, bookZ, 0x8b0000);
+    addBook(0.15, 0.45, 0.3, -8.0, shelfY1 + 0.27, bookZ, 0x2f4f4f);
+    addBook(0.15, 0.52, 0.3, -7.8, shelfY1 + 0.30, bookZ, 0x556b2f);
+    addBook(0.15, 0.48, 0.3, -7.6, shelfY1 + 0.28, bookZ, 0x8b4513);
+    addBook(0.15, 0.50, 0.3, -7.4, shelfY1 + 0.29, bookZ, 0x191970);
+    
+    addBook(0.15, 0.48, 0.3, -8.1, shelfY2 + 0.28, bookZ, 0x800020);
+    addBook(0.15, 0.50, 0.3, -7.9, shelfY2 + 0.29, bookZ, 0x2f4f2f);
+    addBook(0.15, 0.46, 0.3, -7.7, shelfY2 + 0.27, bookZ, 0x654321);
+    
+    // Right shelf books
+    addBook(0.15, 0.50, 0.3, 6.4, shelfY1 + 0.29, bookZ, 0x8b0000);
+    addBook(0.15, 0.48, 0.3, 6.6, shelfY1 + 0.28, bookZ, 0x2f4f4f);
+    addBook(0.15, 0.52, 0.3, 6.8, shelfY1 + 0.30, bookZ, 0x8b4513);
+    addBook(0.15, 0.47, 0.3, 7.0, shelfY1 + 0.28, bookZ, 0x191970);
+    
+    scene.add(roomGroup);
+
+        // --- Physics World ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+        world.broadphase = new CANNON.SAPBroadphase(world);
+        
+        // Enable better collision detection between all shape types
+        // This is critical for Trimesh-Cylinder collisions to work
+        world.solver.iterations = 30; // Much higher for robust collision resolution
+        world.solver.tolerance = 0.0001;
+        world.defaultContactMaterial.contactEquationStiffness = 1e10; // Maximum stiffness
+        world.defaultContactMaterial.contactEquationRelaxation = 1; // Less relaxation for firmer contacts
+        
+        // Allow narrowphase to check all collision pairs (slower but more accurate)
+        if (world.narrowphase) {
+            world.allowSleep = true;
+        }
+        
+        // Physics materials for better collision
+        const physTableMaterial = new CANNON.Material('table');
+        const physCardMaterial = new CANNON.Material('card');
+        
+        const tableCardContact = new CANNON.ContactMaterial(physTableMaterial, physCardMaterial, {
+            friction: 0.6,
+            restitution: 0.1
+        });
+        world.addContactMaterial(tableCardContact);
+        
+        const cardCardContact = new CANNON.ContactMaterial(physCardMaterial, physCardMaterial, {
+            friction: 0.5,
+            restitution: 0.0
+        });
+        world.addContactMaterial(cardCardContact);
+        
+        // DEBUG: Log collision events
+        world.addEventListener('beginContact', (event) => {
+            const bodyA = event.bodyA;
+            const bodyB = event.bodyB;
+            const typeA = bodyA.userData?.type || 'unknown';
+            const typeB = bodyB.userData?.type || 'unknown';
+            if (typeA === 'chip' || typeB === 'chip') {
+                // Try to extract contact details (penetration, normal, etc.)
+                let contactInfo = '';
+                if (event.contact) {
+                    const c = event.contact;
+                    contactInfo = ` | Penetration: ${c.penetration || c.getPenetration?.() || 'n/a'} | Normal: ${c.ni ? c.ni.toString() : 'n/a'} | rA: ${c.ri ? c.ri.toString() : 'n/a'} | rB: ${c.rj ? c.rj.toString() : 'n/a'}`;
+                }
+                console.log('COLLISION DETECTED:', typeA, 'vs', typeB, contactInfo);
+            }
+        });
+
+        // --- Room Physics Boundaries ---
+        // Floor physics body
+        const floorShape = new CANNON.Box(new CANNON.Vec3(ROOM.width / 2, 0.1, ROOM.depth / 2));
+        const floorBody = new CANNON.Body({
+            mass: 0,
+            shape: floorShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, ROOM.floorY, 0)
+        });
+        world.addBody(floorBody);
+        
+        // Ceiling physics body
+        const ceilingShape = new CANNON.Box(new CANNON.Vec3(ROOM.width / 2, 0.1, ROOM.depth / 2));
+        const ceilingBody = new CANNON.Body({
+            mass: 0,
+            shape: ceilingShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, ROOM.ceilingY, 0)
+        });
+        world.addBody(ceilingBody);
+        
+        // Back wall physics body (behind dealer)
+        const backWallShape = new CANNON.Box(new CANNON.Vec3(ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2));
+        const backWallBody = new CANNON.Body({
+            mass: 0,
+            shape: backWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, (ROOM.floorY + ROOM.ceilingY) / 2, -ROOM.depth / 2)
+        });
+        world.addBody(backWallBody);
+        
+        // Front left wall segment physics body
+        const frontLeftWidth = ROOM.width * 0.25;
+        const frontLeftWallShape = new CANNON.Box(new CANNON.Vec3(frontLeftWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2));
+        const frontLeftWallBody = new CANNON.Body({
+            mass: 0,
+            shape: frontLeftWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(-ROOM.width / 2 + frontLeftWidth / 2, (ROOM.floorY + ROOM.ceilingY) / 2, ROOM.depth / 2)
+        });
+        world.addBody(frontLeftWallBody);
+        
+        // Front right wall segment physics body
+        const frontRightWallShape = new CANNON.Box(new CANNON.Vec3(frontLeftWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2));
+        const frontRightWallBody = new CANNON.Body({
+            mass: 0,
+            shape: frontRightWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(ROOM.width / 2 - frontLeftWidth / 2, (ROOM.floorY + ROOM.ceilingY) / 2, ROOM.depth / 2)
+        });
+        world.addBody(frontRightWallBody);
+        
+        // Left wall physics body
+        const leftWallShape = new CANNON.Box(new CANNON.Vec3(ROOM.wallThickness / 2, ROOM.height / 2, ROOM.depth / 2));
+        const leftWallBody = new CANNON.Body({
+            mass: 0,
+            shape: leftWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(-ROOM.width / 2, (ROOM.floorY + ROOM.ceilingY) / 2, 0)
+        });
+        world.addBody(leftWallBody);
+        
+        // Right wall physics body
+        const rightWallShape = new CANNON.Box(new CANNON.Vec3(ROOM.wallThickness / 2, ROOM.height / 2, ROOM.depth / 2));
+        const rightWallBody = new CANNON.Body({
+            mass: 0,
+            shape: rightWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(ROOM.width / 2, (ROOM.floorY + ROOM.ceilingY) / 2, 0)
+        });
+        world.addBody(rightWallBody);
+        
+        // Shelf physics bodies (6 shelves total - 3 left, 3 right)
+        const shelfPhysWidth = 3.5;
+        const shelfPhysDepth = 0.8;
+        const shelfPhysThickness = 0.08;
+        const shelfPhysY1 = ROOM.wainscotHeight + 0.8 + ROOM.floorY;
+        const shelfPhysY2 = shelfPhysY1 + 1.2;
+        const shelfPhysY3 = shelfPhysY2 + 1.2;
+        const shelfPhysZ = -ROOM.depth/2 + shelfPhysDepth/2 + 0.15;
+        
+        // Array to store shelf bodies for wireframe creation later
+        const shelfBodies = [];
+        
+        // Function to add shelf physics body
+        function addShelfPhysics(x, y, z) {
+            const shelfShape = new CANNON.Box(new CANNON.Vec3(shelfPhysWidth / 2, shelfPhysThickness / 2, shelfPhysDepth / 2));
+            const shelfBody = new CANNON.Body({
+                mass: 0,
+                shape: shelfShape,
+                material: physTableMaterial,
+                position: new CANNON.Vec3(x, y, z)
+            });
+            world.addBody(shelfBody);
+            shelfBodies.push({ body: shelfBody, shape: shelfShape });
+        }
+        
+        // Left shelves physics
+        addShelfPhysics(-7, shelfPhysY1, shelfPhysZ);
+        addShelfPhysics(-7, shelfPhysY2, shelfPhysZ);
+        addShelfPhysics(-7, shelfPhysY3, shelfPhysZ);
+        
+        // Right shelves physics
+        addShelfPhysics(7, shelfPhysY1, shelfPhysZ);
+        addShelfPhysics(7, shelfPhysY2, shelfPhysZ);
+        addShelfPhysics(7, shelfPhysY3, shelfPhysZ);
+
+        // --- Shuffle Animation (tween system) ---
+    const activeTweens = [];
+    // Time scaling for shuffle animations (lower = faster)
+    const SHUFFLE_TIME_SCALE = 0.7; // 30% faster visuals while keeping same logic
+    const st = (ms) => Math.max(10, ms * SHUFFLE_TIME_SCALE);
+        function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2; }
+        function clamp01(v){ return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+        // (Removed Fisher–Yates; we now ensure the visible packet moves ARE the real shuffle.)
+
+        // Camera animation for cinematic shuffle view
+        let cameraAnimation = null;
+        const originalCameraPosition = { x: 0, y: 6, z: 8 };
+        const originalCameraTarget = { x: 0, y: 0, z: 0 };
+
+        function saveCameraPosition() {
+            originalCameraPosition.x = camera.position.x;
+            originalCameraPosition.y = camera.position.y;
+            originalCameraPosition.z = camera.position.z;
+            originalCameraTarget.x = controls.target.x;
+            originalCameraTarget.y = controls.target.y;
+            originalCameraTarget.z = controls.target.z;
+        }
+
+        function animateCameraToShoe(duration = 1000) {
+            saveCameraPosition();
+            
+            const shoePos = shoeGroup.position;
+            const targetPos = {
+                x: shoePos.x - 1.5,
+                y: shoePos.y + 1.2,
+                z: shoePos.z + 2
+            };
+            const targetLookAt = {
+                x: shoePos.x,
+                y: shoePos.y + 0.3,
+                z: shoePos.z
+            };
+            
+            const startTime = performance.now();
+            const startPos = { ...originalCameraPosition };
+            const startLookAt = { ...originalCameraTarget };
+            
+            cameraAnimation = {
+                type: 'toShoe',
+                startTime,
+                duration,
+                startPos,
+                startLookAt,
+                targetPos,
+                targetLookAt
+            };
+        }
+
+        function animateCameraBack(duration = 1200) {
+            const shoePos = shoeGroup.position;
+            const startPos = {
+                x: camera.position.x,
+                y: camera.position.y,
+                z: camera.position.z
+            };
+            const startLookAt = {
+                x: controls.target.x,
+                y: controls.target.y,
+                z: controls.target.z
+            };
+            
+            const startTime = performance.now();
+            
+            cameraAnimation = {
+                type: 'back',
+                startTime,
+                duration,
+                startPos,
+                startLookAt,
+                targetPos: originalCameraPosition,
+                targetLookAt: originalCameraTarget
+            };
+        }
+
+        function updateCameraAnimation(timeNow) {
+            if (!cameraAnimation) return;
+            
+            const elapsed = timeNow - cameraAnimation.startTime;
+            const t = clamp01(elapsed / cameraAnimation.duration);
+            const eased = easeInOutQuad(t);
+            
+            // Interpolate camera position
+            camera.position.x = cameraAnimation.startPos.x + (cameraAnimation.targetPos.x - cameraAnimation.startPos.x) * eased;
+            camera.position.y = cameraAnimation.startPos.y + (cameraAnimation.targetPos.y - cameraAnimation.startPos.y) * eased;
+            camera.position.z = cameraAnimation.startPos.z + (cameraAnimation.targetPos.z - cameraAnimation.startPos.z) * eased;
+            
+            // Interpolate look-at target
+            controls.target.x = cameraAnimation.startLookAt.x + (cameraAnimation.targetLookAt.x - cameraAnimation.startLookAt.x) * eased;
+            controls.target.y = cameraAnimation.startLookAt.y + (cameraAnimation.targetLookAt.y - cameraAnimation.startLookAt.y) * eased;
+            controls.target.z = cameraAnimation.startLookAt.z + (cameraAnimation.targetLookAt.z - cameraAnimation.startLookAt.z) * eased;
+            
+            controls.update();
+            
+            if (t >= 1) {
+                cameraAnimation = null;
+            }
+        }
+
+        function addShuffleTween(sc, toY, options = {}) {
+            const now = performance.now();
+            const duration = options.duration ?? 280;
+            const delay = options.delay ?? 0;
+            const bump = options.bump ?? 0.05; // vertical arc bump in scene units
+            const swayX = options.swayX ?? (Math.random() - 0.5) * 0.08;
+            const swayZ = options.swayZ ?? (Math.random() - 0.5) * 0.08;
+            // Optional gentle recentring toward a target X/Z to keep the stack tidy
+            const centerX = options.centerX;
+            const centerZ = options.centerZ;
+            const centerLerp = options.centerLerp ?? 0; // 0..1 amount to blend toward center over the tween
+            const fromY = sc.body.position.y;
+            const baseX = sc.body.position.x;
+            const baseZ = sc.body.position.z;
+            const tween = {
+                sc, fromY, toY, baseX, baseZ, duration, start: now + delay, bump, swayX, swayZ,
+                centerX, centerZ, centerLerp,
+                done: false
+            };
+            activeTweens.push(tween);
+        }
+
+        function updateShuffleTweens(timeNow) {
+            if (activeTweens.length === 0) return;
+            for (let i = activeTweens.length - 1; i >= 0; i--) {
+                const twn = activeTweens[i];
+                
+                // Handle slide tweens
+                if (twn.slide) {
+                    const t = (timeNow - twn.start) / twn.duration;
+                    if (t < 0) continue;
+                    const tt = clamp01(t);
+                    const e = easeInOutQuad(tt);
+                    const x = twn.fromX + (twn.toX - twn.fromX) * e;
+                    const z = twn.fromZ + (twn.toZ - twn.fromZ) * e;
+                    twn.sc.body.position.set(x, twn.y, z);
+                    twn.sc.mesh.position.copy(twn.sc.body.position);
+                    if (tt >= 1) activeTweens.splice(i, 1);
+                    continue;
+                }
+                
+                // Handle deal tweens (slide + arc + flip)
+                if (twn.deal) {
+                    const t = (timeNow - twn.start) / twn.duration;
+                    if (t < 0) continue;
+                    const tt = clamp01(t);
+                    const e = easeInOutQuad(tt);
+                    
+                    // Position interpolation with arc
+                    const x = twn.fromPos.x + (twn.toPos.x - twn.fromPos.x) * e;
+                    const z = twn.fromPos.z + (twn.toPos.z - twn.fromPos.z) * e;
+                    const baseY = twn.fromPos.y + (twn.toPos.y - twn.fromPos.y) * e;
+                    const y = baseY + Math.sin(Math.PI * tt) * twn.arcHeight;
+                    
+                    twn.sc.body.position.set(x, y, z);
+                    twn.sc.mesh.position.copy(twn.sc.body.position);
+                    
+                    // Rotation (flip) - starts at PI (face down) and rotates to 0 (face up)
+                    // Flip happens in the middle portion of the animation
+                    let rotationX = Math.PI; // Start face down
+                    
+                    if (!twn.stayFaceDown) {
+                        // Normal flip animation
+                        const flipStart = 0.3; // Start flip at 30% through animation
+                        const flipEnd = 0.7;   // End flip at 70% through animation
+                        
+                        if (tt >= flipStart && tt <= flipEnd) {
+                            const flipProgress = (tt - flipStart) / (flipEnd - flipStart);
+                            const flipEased = easeInOutQuad(flipProgress);
+                            rotationX = Math.PI - (Math.PI * flipEased); // Rotate from PI to 0
+                        } else if (tt > flipEnd) {
+                            rotationX = 0; // Face up
+                        }
+                    }
+                    // If stayFaceDown is true, rotationX stays at Math.PI (face down)
+                    
+                    twn.sc.mesh.rotation.x = rotationX;
+                    twn.sc.body.quaternion.setFromEuler(rotationX, 0, 0);
+                    
+                    if (tt >= 1) {
+                        // Ensure final state is correct
+                        twn.sc.body.position.set(twn.toPos.x, twn.toPos.y, twn.toPos.z);
+                        twn.sc.mesh.position.copy(twn.sc.body.position);
+                        
+                        // Set final rotation based on whether card should be face down
+                        const finalRotation = twn.stayFaceDown ? Math.PI : 0;
+                        twn.sc.mesh.rotation.x = finalRotation;
+                        twn.sc.body.quaternion.setFromEuler(finalRotation, 0, 0);
+                        
+                        twn.sc.body.velocity.set(0, 0, 0);
+                        twn.sc.body.angularVelocity.set(0, 0, 0);
+                        // Mark this card as dealt so we don't overwrite its rotation
+                        twn.sc.isDealt = true;
+                        
+                        // Force visibility
+                        twn.sc.mesh.visible = true;
+                        twn.sc.mesh.children.forEach(child => child.visible = true);
+                        
+                        activeTweens.splice(i, 1);
+                    }
+                    continue;
+                }
+                
+                // Handle slideIn tweens (slide card into discard tray - no flip, just movement)
+                if (twn.slideIn) {
+                    const t = (timeNow - twn.start) / twn.duration;
+                    if (t < 0) continue;
+                    const tt = clamp01(t);
+                    const e = easeInOutQuad(tt);
+                    
+                    // Position interpolation
+                    const x = twn.fromPos.x + (twn.toPos.x - twn.fromPos.x) * e;
+                    const y = twn.fromPos.y + (twn.toPos.y - twn.fromPos.y) * e;
+                    const z = twn.fromPos.z + (twn.toPos.z - twn.fromPos.z) * e;
+                    
+                    twn.sc.body.position.set(x, y, z);
+                    twn.sc.mesh.position.copy(twn.sc.body.position);
+                    
+                    if (tt >= 1) {
+                        if (twn.onComplete) twn.onComplete();
+                        activeTweens.splice(i, 1);
+                    }
+                    continue;
+                }
+                
+                // Handle flip tweens (flip card from face down to face up)
+                if (twn.flip) {
+                    const t = (timeNow - twn.start) / twn.duration;
+                    if (t < 0) continue;
+                    const tt = clamp01(t);
+                    const e = easeInOutQuad(tt);
+                    
+                    // Rotation interpolation
+                    const rotationX = twn.fromRotation + (twn.toRotation - twn.fromRotation) * e;
+                    twn.sc.mesh.rotation.x = rotationX;
+                    twn.sc.body.quaternion.setFromEuler(rotationX, 0, 0);
+                    
+                    // Lift card up during flip to avoid clipping through table
+                    const liftHeight = 0.3; // Lift 0.3 units above table
+                    const yOffset = Math.sin(Math.PI * tt) * liftHeight; // Arc up and back down
+                    twn.sc.body.position.y = twn.originalY + yOffset;
+                    twn.sc.mesh.position.copy(twn.sc.body.position);
+                    
+                    if (tt >= 1) {
+                        twn.sc.mesh.rotation.x = twn.toRotation;
+                        twn.sc.body.quaternion.setFromEuler(twn.toRotation, 0, 0);
+                        twn.sc.body.position.y = twn.originalY; // Return to original height
+                        twn.sc.mesh.position.copy(twn.sc.body.position);
+                        activeTweens.splice(i, 1);
+                    }
+                    continue;
+                }
+                
+                // Handle discard tweens (slide cards to discard tray)
+                if (twn.discard) {
+                    const t = (timeNow - twn.start) / twn.duration;
+                    if (t < 0) continue;
+                    const tt = clamp01(t);
+                    const e = easeInOutQuad(tt);
+                    
+                    // Position interpolation
+                    const x = twn.fromPos.x + (twn.toPos.x - twn.fromPos.x) * e;
+                    const y = twn.fromPos.y + (twn.toPos.y - twn.fromPos.y) * e;
+                    const z = twn.fromPos.z + (twn.toPos.z - twn.fromPos.z) * e;
+                    
+                    twn.sc.body.position.set(x, y, z);
+                    twn.sc.mesh.position.copy(twn.sc.body.position);
+                    
+                    // Flip card face down during discard animation
+                    // Start from 0 (face up) and rotate to Math.PI (face down)
+                    const flipStart = 0.3;
+                    const flipEnd = 0.7;
+                    let rotationX = twn.sc.mesh.rotation.x; // Current rotation
+                    
+                    if (tt >= flipStart && tt <= flipEnd) {
+                        const flipProgress = (tt - flipStart) / (flipEnd - flipStart);
+                        const flipEased = easeInOutQuad(flipProgress);
+                        rotationX = flipEased * Math.PI; // Rotate from 0 to PI
+                    } else if (tt > flipEnd) {
+                        rotationX = Math.PI; // Face down
+                    }
+                    
+                    twn.sc.mesh.rotation.x = rotationX;
+                    twn.sc.body.quaternion.setFromEuler(rotationX, 0, 0);
+                    
+                    if (tt >= 1) {
+                        // Ensure final state is face down
+                        twn.sc.mesh.rotation.x = Math.PI;
+                        twn.sc.body.quaternion.setFromEuler(Math.PI, 0, 0);
+                        if (twn.onComplete) twn.onComplete();
+                        activeTweens.splice(i, 1);
+                    }
+                    continue;
+                }
+                
+                // Handle original shuffle tweens (vertical Y movement with sway)
+                const t = (timeNow - twn.start) / twn.duration;
+                if (t < 0) continue; // not started yet
+                const tt = clamp01(t);
+                const e = easeInOutQuad(tt);
+                // Position along Y with a gentle arc
+                const y = twn.fromY + (twn.toY - twn.fromY) * e + Math.sin(Math.PI * tt) * twn.bump;
+                // Elegant side sway that returns to base
+                const swayPhase = Math.sin(Math.PI * tt);
+                let x = twn.baseX + twn.swayX * swayPhase;
+                let z = twn.baseZ + twn.swayZ * swayPhase;
+                // Gentle recentre over time if requested
+                if (twn.centerLerp && (twn.centerX !== undefined || twn.centerZ !== undefined)) {
+                    const lerpAmt = twn.centerLerp * e; // ramp in with ease
+                    if (twn.centerX !== undefined) x = x + (twn.centerX - twn.baseX) * lerpAmt;
+                    if (twn.centerZ !== undefined) z = z + (twn.centerZ - twn.baseZ) * lerpAmt;
+                }
+                twn.sc.body.position.set(x, y, z);
+                twn.sc.mesh.position.copy(twn.sc.body.position);
+                if (tt >= 1) {
+                    activeTweens.splice(i, 1);
+                }
+            }
+        }
+
+        // Debug wireframe collections
+        let cannonWireframes = []; // { wireframe, body }
+        const debugState = {
+            showRapierWireframes: false,
+            showCannonWireframes: false,
+            showVisualWireframes: false
+        };
+
+        // --- Blackjack Table ---
+        // Create a proper blackjack table shape (curved player side, straight dealer side)
+        function createBlackjackTableShape() {
+            const shape = new THREE.Shape();
+            
+            // Table dimensions (scaled up by 30%)
+            const tableWidth = 10.4; // 8 * 1.3
+            const tableDepth = 6.5; // 5 * 1.3
+            const curveRadius = 5.2; // 4 * 1.3
+            
+            // Start at bottom-left corner (dealer side)
+            shape.moveTo(-tableWidth / 2, -tableDepth / 2);
+            
+            // Dealer side (straight)
+            shape.lineTo(tableWidth / 2, -tableDepth / 2);
+            
+            // Right side
+            shape.lineTo(tableWidth / 2, tableDepth / 2 - curveRadius);
+            
+            // Curved player side (using quadratic curve for smooth arc)
+            const numCurveSegments = 32;
+            for (let i = 0; i <= numCurveSegments; i++) {
+                const angle = (i / numCurveSegments) * Math.PI;
+                const x = Math.cos(angle) * curveRadius;
+                const z = Math.sin(angle) * curveRadius;
+                shape.lineTo(x, tableDepth / 2 - curveRadius + z);
+            }
+            
+            // Left side
+            shape.lineTo(-tableWidth / 2, tableDepth / 2 - curveRadius);
+            shape.lineTo(-tableWidth / 2, -tableDepth / 2);
+            
+            return shape;
+        }
+
+        const tableShape = createBlackjackTableShape();
+        const extrudeSettings = {
+            depth: 0.13, // 0.1 * 1.3
+            bevelEnabled: true,
+            bevelThickness: 0.026, // 0.02 * 1.3
+            bevelSize: 0.026, // 0.02 * 1.3
+            bevelSegments: 3
+        };
+
+        const tableGeometry = new THREE.ExtrudeGeometry(tableShape, extrudeSettings);
+        const tableMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a5f1e, // Casino green felt
+            roughness: 0.8,
+            metalness: 0.0
+        });
+    const table = new THREE.Mesh(tableGeometry, tableMaterial);
+    table.rotation.x = -Math.PI / 2; // Rotate to be flat (x-y plane)
+    table.rotation.z = Math.PI; // Rotate 180 degrees so curved side faces player
+    // Place so the TOP surface aligns exactly to y = 0
+    // Extrude depth is along +Y after rotation, starting at 0 -> depth.
+    // Position the mesh down by its full depth so top sits at y=0.
+    table.position.y = -0.13 + TABLE_Y_SHIFT; // = -extrudeSettings.depth plus global shift
+        table.receiveShadow = true;
+        scene.add(table);
+
+        // --- Rapier physics (chips ↔ exact table surface) ---
+        let RAPIER = null;
+        let rapierWorld = null;
+        let rapierReady = false;
+        const rapierChips = [];
+        const queuedRapierSpawns = [];
+        const queuedRapierValueSpawns = [];
+        let FELT_TOP_Y_RAPIER = 0; // computed from transformed table geometry
+        const rapierRoomWireframes = []; // room (floor + walls) wireframes for debug
+        // Perimeter boxes (rail inner wall) bookkeeping (re-added after refactor)
+        const rapierRailPerimeterBoxColliders = [];
+        const rapierRailPerimeterBoxWireframes = [];
+        const railPerimeterBoxConfig = {
+            spacing: 0.125,
+            bottomY: -0.3,
+            topY: -0.1,
+            radialDepth: 0.5,
+            tangentialWidth: 0.12,
+            normalOffset: 0.0
+        };
+
+        function createRailInnerPerimeterBoxColliders(options = {}) {
+            if (!rapierReady || !rail || !rail.geometry) return 0;
+            const cfg = Object.assign({ wireColor: 0xff00ff }, railPerimeterBoxConfig, options);
+            const { spacing, bottomY, topY, radialDepth, tangentialWidth, normalOffset, wireColor } = cfg;
+            const shape = createBlackjackTableShape();
+            const totalLen = (typeof shape.getLength === 'function') ? shape.getLength() : null;
+            const count = totalLen ? Math.max(4, Math.round(totalLen / spacing)) : 600;
+            const pts = shape.getSpacedPoints(count);
+            if (!pts || pts.length < 3) return 0;
+            const halfY = (topY - bottomY) * 0.5;
+            const hx = radialDepth * 0.5;
+            const hz = tangentialWidth * 0.5;
+            const centerY = bottomY + halfY;
+            let created = 0;
+            for (let i = 0; i < pts.length - 1; i++) {
+                const pPrev = pts[(i - 1 + pts.length - 1) % (pts.length - 1)];
+                const p = pts[i];
+                const pNext = pts[(i + 1) % (pts.length - 1)];
+                let tx = pNext.x - pPrev.x;
+                let ty = pNext.y - pPrev.y;
+                const tlen = Math.hypot(tx, ty); if (tlen < 1e-6) continue; tx /= tlen; ty /= tlen;
+                const nA = { x: -ty, y: tx }; const nB = { x: ty, y: -tx };
+                const dotA = nA.x * p.x + nA.y * p.y;
+                const n2d = (dotA >= 0) ? nA : nB;
+                const nLen = Math.hypot(n2d.x, n2d.y); if (nLen < 1e-6) continue;
+                const inx = -n2d.x / nLen; const inz = -n2d.y / nLen;
+                const cx = p.x + inx * (normalOffset + hx);
+                const cz = p.y + inz * (normalOffset + hx);
+                const yaw = Math.atan2(-inz, inx);
+                const halfYaw = yaw * 0.5;
+                const q = new RAPIER.Quaternion(0, Math.sin(halfYaw), 0, Math.cos(halfYaw));
+                const colDesc = RAPIER.ColliderDesc.cuboid(hx, halfY, hz)
+                    .setTranslation(cx, centerY, cz)
+                    .setRotation(q)
+                    .setFriction(0.6)
+                    .setRestitution(0.1);
+                const collider = rapierWorld.createCollider(colDesc);
+                rapierRailPerimeterBoxColliders.push(collider);
+                created++;
+                const wfGeom = new THREE.BoxGeometry(hx * 2, halfY * 2, hz * 2);
+                const edges = new THREE.EdgesGeometry(wfGeom);
+                const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: wireColor }));
+                line.position.set(cx, centerY, cz);
+                line.rotation.y = yaw;
+                line.visible = debugState.showRapierWireframes;
+                scene.add(line);
+                rapierTableWireframes.push(line);
+                rapierRailPerimeterBoxWireframes.push(line);
+            }
+            console.log(`[Rapier] Rail inner perimeter boxes created: ${created}, spacing=${spacing}`);
+            if (debugState.showRapierWireframes) rapierRailPerimeterBoxWireframes.forEach(w => { if (w) w.visible = true; });
+            return created;
+        }
+
+        async function initRapier() {
+            if (rapierReady) return;
+            const primary = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.13.1/rapier.es.js';
+            const fallback = 'https://unpkg.com/@dimforge/rapier3d-compat@0.13.1/rapier.es.js';
+            try {
+                const rapierMod = await import(primary).catch(() => import(fallback));
+                // compat build exposes init(); default export may be under rapierMod or rapierMod.default
+                RAPIER = rapierMod.default || rapierMod;
+                if (typeof RAPIER.init === 'function') {
+                    await RAPIER.init();
+                } else if (typeof rapierMod.init === 'function') {
+                    await rapierMod.init();
+                }
+                const gravity = new RAPIER.Vector3(0, -9.81, 0);
+                rapierWorld = new RAPIER.World(gravity);
+                    // Tune solver for thin stacked objects
+                    rapierWorld.integrationParameters.numSolverIterations = 8;
+                    rapierWorld.integrationParameters.numAdditionalFrictionIterations = 4;
+                    rapierWorld.integrationParameters.numInternalPgsIterations = 1;
+                // Felt top reference
+                FELT_TOP_Y_RAPIER = FELT_TOP_Y;
+                rapierReady = true;
+                buildRapierTableParts();
+                buildRapierRoomSurfaces();
+                if (queuedRapierSpawns.length) {
+                    queuedRapierSpawns.forEach(p => createRapierChip(p.x, p.y, p.z));
+                    queuedRapierSpawns.length = 0;
+                }
+                if (queuedRapierValueSpawns.length) {
+                    queuedRapierValueSpawns.forEach(cfg => createRapierValueChip(cfg.value, cfg.position));
+                    queuedRapierValueSpawns.length = 0;
+                }
+                console.log('[Rapier] Init complete.');
+            } catch (e) {
+                console.error('[Rapier] Init failed', e);
+            }
+        }
+        initRapier();
+
+        function spawnRapierChipAtCenter(height = 0.5) {
+            const x = 0, z = 0;
+            const y = (rapierReady ? FELT_TOP_Y_RAPIER : 0) + height;
+            spawnRapierChip(x, y, z);
+        }
+
+        function spawnRapierChip(x, y, z) {
+            if (!rapierReady) {
+                console.warn('[Rapier] Not ready yet; queueing chip');
+                queuedRapierSpawns.push({ x, y, z });
+                return null;
+            }
+            return createRapierChip(x, y, z);
+        }
+
+        function createRapierChip(x, y, z) {
+            // Use exact debug-page chip dimensions for consistency
+            const chipRadius = 0.195;
+            const chipHeight = 0.04;
+            const geo = new THREE.CylinderGeometry(chipRadius, chipRadius, chipHeight, 32);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffcc66, roughness: 0.5, metalness: 0.2 });
+            const chipMesh = new THREE.Mesh(geo, mat);
+            chipMesh.castShadow = true;
+            chipMesh.receiveShadow = true;
+            
+            // Use Group for consistency with createRapierValueChip
+            const chipGroup = new THREE.Group();
+            chipGroup.add(chipMesh);
+            scene.add(chipGroup);
+
+            const rbDesc = RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(x, y, z)
+                .setLinearDamping(0.5)
+                .setAngularDamping(0.5);
+            if (typeof rbDesc.setCcdEnabled === 'function') rbDesc.setCcdEnabled(true);
+            const rb = rapierWorld.createRigidBody(rbDesc);
+            const colDesc = RAPIER.ColliderDesc.cylinder(chipHeight / 2, chipRadius)
+                .setFriction(0.55)
+                .setRestitution(0.12);
+            const collider = rapierWorld.createCollider(colDesc, rb);
+            // Secondary box collider inscribed in cylinder for better edge detection
+            const boxHalfSize = chipRadius / Math.sqrt(2); // diagonal = diameter
+            const boxColDesc = RAPIER.ColliderDesc.cuboid(boxHalfSize, chipHeight / 2, boxHalfSize)
+                .setFriction(0.55)
+                .setRestitution(0.12);
+            rapierWorld.createCollider(boxColDesc, rb);
+            
+            // Add wireframe for chip
+            const chipEdges = new THREE.EdgesGeometry(geo);
+            const chipWire = new THREE.LineSegments(chipEdges, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+            chipWire.visible = debugState.showRapierWireframes;
+            chipGroup.add(chipWire);
+            
+            const chip = { mesh: chipGroup, rb, collider, wireframe: chipWire, radius: chipRadius, height: chipHeight };
+            rapierChips.push(chip);
+            return chip;
+        }
+
+        // Create a Rapier-backed chip with existing visual style and exact CHIP dimensions
+        function createRapierValueChip(value, position) {
+            const chipType = CHIP_TYPES[value];
+            if (!chipType) return null;
+            
+            if (!rapierReady) {
+                console.warn('[Rapier] Not ready; queueing value chip');
+                queuedRapierValueSpawns.push({ value, position });
+                return null;
+            }
+            
+            const chipGroup = new THREE.Group();
+            const geometry = new THREE.CylinderGeometry(CHIP.radius, CHIP.radius, CHIP.thickness, 32);
+            const faceTexture = createChipTexture(chipType);
+            const faceMaterial = new THREE.MeshStandardMaterial({ map: faceTexture, roughness: 0.4, metalness: 0.3 });
+            const edgeMaterial = new THREE.MeshStandardMaterial({ color: chipType.edgeColor, roughness: 0.5, metalness: 0.2 });
+            const chipMesh = new THREE.Mesh(geometry, [edgeMaterial, faceMaterial, faceMaterial]);
+            chipMesh.castShadow = true;
+            chipMesh.receiveShadow = true;
+            chipGroup.add(chipMesh);
+            scene.add(chipGroup);
+
+            const rbDesc = RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(position.x, position.y, position.z)
+                .setLinearDamping(0.5)
+                .setAngularDamping(0.5);
+            if (typeof rbDesc.setCcdEnabled === 'function') rbDesc.setCcdEnabled(true);
+            const rb = rapierWorld.createRigidBody(rbDesc);
+            const colDesc = RAPIER.ColliderDesc.cylinder(CHIP.thickness / 2, CHIP.radius)
+                .setFriction(0.55)
+                .setRestitution(0.12);
+            const collider = rapierWorld.createCollider(colDesc, rb);
+            // Secondary box collider inscribed in cylinder for better edge detection
+            const boxHalfSize = CHIP.radius / Math.sqrt(2); // diagonal = diameter
+            const boxColDesc = RAPIER.ColliderDesc.cuboid(boxHalfSize, CHIP.thickness / 2, boxHalfSize)
+                .setFriction(0.55)
+                .setRestitution(0.12);
+            rapierWorld.createCollider(boxColDesc, rb);
+            
+            // Add wireframe for chip
+            const chipEdges = new THREE.EdgesGeometry(geometry);
+            const chipWire = new THREE.LineSegments(chipEdges, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+            chipWire.visible = debugState.showRapierWireframes;
+            chipGroup.add(chipWire);
+            
+            const chip = { value, mesh: chipGroup, rb, collider, wireframe: chipWire, radius: CHIP.radius, height: CHIP.thickness };
+            rapierChips.push(chip);
+            return chip;
+        }
+
+        // Table rail/edge (padded wooden bumper around the table perimeter)
+        const railShape = createBlackjackTableShape();
+        const railGeometry = new THREE.ExtrudeGeometry(railShape, {
+            depth: 0.156, // 0.12 * 1.3
+            bevelEnabled: true,
+            bevelThickness: 0.013, // 0.01 * 1.3
+            bevelSize: 0.013, // 0.01 * 1.3
+            bevelSegments: 2
+        });
+        const railMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2d1810, // Dark wood
+            roughness: 0.6,
+            metalness: 0.1
+        });
+    const rail = new THREE.Mesh(railGeometry, railMaterial);
+        rail.rotation.x = -Math.PI / 2;
+        rail.rotation.z = Math.PI; // Match table rotation
+    // Set rail so its top aligns with y=0 (slightly below felt)
+    rail.position.y = -0.156 + TABLE_Y_SHIFT; // = -rail extrude depth plus shift
+        rail.receiveShadow = true;
+        rail.castShadow = true;
+        scene.add(rail);
+
+        // Inner curb/bumper (raised edge around the playing surface)
+        function createCurbShape() {
+            const shape = new THREE.Shape();
+            
+            const tableWidth = 9.88; // 7.6 * 1.3
+            const tableDepth = 5.98; // 4.6 * 1.3
+            const curveRadius = 4.68; // 3.6 * 1.3
+            
+            shape.moveTo(-tableWidth / 2, -tableDepth / 2);
+            shape.lineTo(tableWidth / 2, -tableDepth / 2);
+            shape.lineTo(tableWidth / 2, tableDepth / 2 - curveRadius);
+            
+            const numCurveSegments = 32;
+            for (let i = 0; i <= numCurveSegments; i++) {
+                const angle = (i / numCurveSegments) * Math.PI;
+                const x = Math.cos(angle) * curveRadius;
+                const z = Math.sin(angle) * curveRadius;
+                shape.lineTo(x, tableDepth / 2 - curveRadius + z);
+            }
+            
+            shape.lineTo(-tableWidth / 2, tableDepth / 2 - curveRadius);
+            shape.lineTo(-tableWidth / 2, -tableDepth / 2);
+            
+            return shape;
+        }
+
+        const curbShape = createCurbShape();
+        const curbGeometry = new THREE.ExtrudeGeometry(curbShape, {
+            depth: 0.104, // 0.08 * 1.3
+            bevelEnabled: true,
+            bevelThickness: 0.026, // 0.02 * 1.3
+            bevelSize: 0.026, // 0.02 * 1.3
+            bevelSegments: 3
+        });
+        const curbMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a4d28, // Darker green for curb
+            roughness: 0.7,
+            metalness: 0.0
+        });
+    const curb = new THREE.Mesh(curbGeometry, curbMaterial);
+        curb.rotation.x = -Math.PI / 2;
+        curb.rotation.z = Math.PI; // Match table rotation
+    // Sit the curb on top of the felt with a tiny lift to avoid z-fighting
+    curb.position.y = 0.001 + TABLE_Y_SHIFT;
+        curb.castShadow = true;
+        curb.receiveShadow = true;
+        scene.add(curb);
+
+        // --- Chip Holder Rack (Vertical Half-Pipe Design) ---
+        // Based on reference image: natural wood base with 5 half-pipe slots for vertical chip storage
+        const CHIP_HOLDER = {
+            numSlots: 5,
+            slotRadius: CHIP.radius * 1.05,     // Half-pipe radius (slightly larger than chip)
+            slotDepth: CHIP.radius * 2.8,       // Length of half-pipe channel
+            slotSpacing: CHIP.radius * 2.6,     // Space between slot centers
+            baseThickness: CHIP.radius * 1.4,   // Thick enough for carved slots
+            baseWidth: null,                    // Calculated from slots
+            baseDepth: CHIP.radius * 3.2,       // Base extends beyond slots
+            position: { x: 3.5, y: FELT_TOP_Y, z: 2.8 },
+            rotationY: 0
+        };
+        
+        // Calculate total base width
+        CHIP_HOLDER.baseWidth = CHIP_HOLDER.numSlots * CHIP_HOLDER.slotSpacing + CHIP.radius * 1.5;
+
+        const chipHolderGroup = new THREE.Group();
+        
+        // Natural wood material with realistic color variation
+        const woodMaterial = new THREE.MeshStandardMaterial({
+            color: 0xb8956a,        // Natural oak color
+            roughness: 0.75,
+            metalness: 0.02
+        });
+        
+        // Create base plate
+        const baseGeom = new THREE.BoxGeometry(
+            CHIP_HOLDER.baseWidth,
+            CHIP_HOLDER.baseThickness,
+            CHIP_HOLDER.baseDepth
+        );
+        const baseMesh = new THREE.Mesh(baseGeom, woodMaterial);
+        baseMesh.position.y = CHIP_HOLDER.baseThickness / 2;
+        baseMesh.castShadow = true;
+        baseMesh.receiveShadow = true;
+        chipHolderGroup.add(baseMesh);
+
+        // Position the holder on player's right side
+        chipHolderGroup.position.set(
+            CHIP_HOLDER.position.x,
+            CHIP_HOLDER.position.y,
+            CHIP_HOLDER.position.z
+        );
+        chipHolderGroup.rotation.y = CHIP_HOLDER.rotationY;
+        scene.add(chipHolderGroup);
+        window.chipHolderGroup = chipHolderGroup; // Expose for Rapier physics
+
+        // Table pedestal/support (cylinder-based stand)
+        const pedestalGeometry = new THREE.CylinderGeometry(0.65, 1.04, 3.25, 16); // Scaled by 1.3
+        const pedestalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3d2817,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        const pedestal = new THREE.Mesh(pedestalGeometry, pedestalMaterial);
+    pedestal.position.y = -1.625 + TABLE_Y_SHIFT; // -1.25 * 1.3 plus shift
+        pedestal.castShadow = true;
+        pedestal.receiveShadow = true;
+        scene.add(pedestal);
+
+        // Table base (wider foot)
+        const baseGeometry = new THREE.CylinderGeometry(1.56, 1.95, 0.39, 16); // Scaled by 1.3
+        const base = new THREE.Mesh(baseGeometry, pedestalMaterial);
+        base.position.y = -3.445 + TABLE_Y_SHIFT; // -2.65 * 1.3 plus shift
+        base.castShadow = true;
+        base.receiveShadow = true;
+        scene.add(base);
+
+        // --- Table Physics: Rapier static colliders from exact visual geometry ---
+        const rapierTableWireframes = []; // Store wireframes for Rapier table parts
+        
+        // Helper to build Rapier trimesh from a mesh with world transform baked in
+        function createRapierTrimeshFromMesh(mesh, offsetY = 0) {
+            mesh.updateMatrixWorld(true);
+            const geom = mesh.geometry.clone();
+            geom.applyMatrix4(mesh.matrixWorld);
+            const posAttr = geom.getAttribute('position');
+            const indexAttr = geom.index;
+            const verts = new Float32Array(posAttr.count * 3);
+            for (let i = 0; i < posAttr.count; i++) {
+                verts[i * 3 + 0] = posAttr.getX(i);
+                verts[i * 3 + 1] = posAttr.getY(i);
+                verts[i * 3 + 2] = posAttr.getZ(i);
+            }
+            let inds;
+            if (indexAttr) {
+                inds = new Uint32Array(indexAttr.count);
+                for (let i = 0; i < indexAttr.count; i++) inds[i] = indexAttr.getX(i);
+            } else {
+                inds = new Uint32Array(posAttr.count);
+                for (let i = 0; i < posAttr.count; i++) inds[i] = i;
+            }
+            const colDesc = RAPIER.ColliderDesc.trimesh(verts, inds)
+                .setFriction(0.6)
+                .setRestitution(0.1);
+            if (offsetY !== 0) colDesc.setTranslation(0, offsetY, 0);
+            return { colDesc, verts, inds };
+        }
+
+        // Helper: create a narrow top-band collider from triangles within a Y-band near the mesh top.
+        // The band is optionally translated so its top aligns with targetTopY, preserving lower geometry for the step.
+        function createRapierTopBandCollider(mesh, bandHeight = 0.012, targetTopY = null) {
+            mesh.updateMatrixWorld(true);
+            const geom = mesh.geometry.clone();
+            geom.applyMatrix4(mesh.matrixWorld);
+            const posAttr = geom.getAttribute('position');
+            const indexAttr = geom.index;
+            const triCount = (indexAttr ? indexAttr.count : posAttr.count) / 3;
+            const getIndex = (i) => indexAttr ? indexAttr.getX(i) : i;
+            let maxY = -Infinity;
+            for (let i=0;i<posAttr.count;i++) maxY = Math.max(maxY, posAttr.getY(i));
+            const minBandY = maxY - bandHeight - 1e-5;
+
+            // Build compact vertex/index arrays for triangles fully inside the band
+            const newPositions = [];
+            const newIndices = [];
+            const remap = new Map();
+            let nextIdx = 0;
+            for (let t=0;t<triCount;t++) {
+                const ia = getIndex(t*3), ib = getIndex(t*3+1), ic = getIndex(t*3+2);
+                const ay = posAttr.getY(ia), by = posAttr.getY(ib), cy = posAttr.getY(ic);
+                if (ay >= minBandY && by >= minBandY && cy >= minBandY) {
+                    const vv = [ia, ib, ic];
+                    for (const v of vv) {
+                        if (!remap.has(v)) {
+                            remap.set(v, nextIdx++);
+                            newPositions.push(posAttr.getX(v), posAttr.getY(v), posAttr.getZ(v));
+                        }
+                    }
+                    newIndices.push(remap.get(ia), remap.get(ib), remap.get(ic));
+                }
+            }
+            if (newIndices.length === 0) return null;
+
+            const verts = new Float32Array(newPositions);
+            const inds = new Uint32Array(newIndices);
+            const colDesc = RAPIER.ColliderDesc.trimesh(verts, inds)
+                .setFriction(0.6)
+                .setRestitution(0.1);
+            let liftApplied = 0;
+            if (targetTopY != null && Number.isFinite(targetTopY)) {
+                liftApplied = targetTopY - maxY;
+                if (Math.abs(liftApplied) > 1e-6) colDesc.setTranslation(0, liftApplied, 0);
+            }
+
+            return { colDesc, verts, inds, liftApplied, originalTopY: maxY };
+        }
+
+
+
+        // Create wireframe for Rapier static collider
+        function createRapierWireframe(mesh, offsetY = 0, color = 0x00ff00) {
+            mesh.updateMatrixWorld(true);
+            const geom = mesh.geometry.clone();
+            geom.applyMatrix4(mesh.matrixWorld);
+            const edges = new THREE.EdgesGeometry(geom);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: color }));
+            if (offsetY !== 0) line.position.y += offsetY;
+            line.visible = debugState.showRapierWireframes;
+            scene.add(line);
+            rapierTableWireframes.push(line);
+            return line;
+        }
+
+        // Aggregate Group into Rapier trimesh collider (walls composed of many meshes)
+        function createRapierTrimeshFromObject(object3D) {
+            object3D.updateMatrixWorld(true);
+            const meshes = [];
+            object3D.traverse(child => { if (child.isMesh) meshes.push(child); });
+            let vertCount = 0, indexCount = 0;
+            for (const m of meshes) {
+                const g = m.geometry;
+                vertCount += g.getAttribute('position').count;
+                indexCount += g.index ? g.index.count : g.getAttribute('position').count;
+            }
+            const verts = new Float32Array(vertCount * 3);
+            const inds = new Uint32Array(indexCount);
+            let vOffset = 0, iOffset = 0, globalIndexBase = 0;
+            for (const m of meshes) {
+                const g = m.geometry.clone();
+                g.applyMatrix4(m.matrixWorld);
+                const posAttr = g.getAttribute('position');
+                for (let i = 0; i < posAttr.count; i++) {
+                    verts[(vOffset + i) * 3 + 0] = posAttr.getX(i);
+                    verts[(vOffset + i) * 3 + 1] = posAttr.getY(i);
+                    verts[(vOffset + i) * 3 + 2] = posAttr.getZ(i);
+                }
+                const idxAttr = g.index;
+                if (idxAttr) {
+                    for (let i = 0; i < idxAttr.count; i++) inds[iOffset + i] = globalIndexBase + idxAttr.getX(i);
+                    iOffset += idxAttr.count;
+                } else {
+                    for (let i = 0; i < posAttr.count; i++) inds[iOffset + i] = globalIndexBase + i;
+                    iOffset += posAttr.count;
+                }
+                vOffset += posAttr.count;
+                globalIndexBase += posAttr.count;
+            }
+            const colDesc = RAPIER.ColliderDesc.trimesh(verts, inds)
+                .setFriction(0.8)
+                .setRestitution(0.05);
+            return { colDesc, verts, inds };
+        }
+
+        function createRapierWireframeFromObject(object3D) {
+            object3D.updateMatrixWorld(true);
+            const group = new THREE.Group();
+            object3D.traverse(child => {
+                if (child.isMesh) {
+                    const g = child.geometry.clone();
+                    g.applyMatrix4(child.matrixWorld);
+                    const edges = new THREE.EdgesGeometry(g);
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x009900 }));
+                    group.add(line);
+                }
+            });
+            group.visible = debugState.showCannonWireframes;
+            scene.add(group);
+            rapierRoomWireframes.push(group);
+            return group;
+        }
+
+
+        function clearRailInnerPerimeterBoxColliders() {
+            // Remove Rapier colliders
+            while (rapierRailPerimeterBoxColliders.length) {
+                const c = rapierRailPerimeterBoxColliders.pop();
+                try { rapierWorld.removeCollider(c, true); } catch (e) { /* ignore */ }
+            }
+            // Remove wireframes from scene
+            while (rapierRailPerimeterBoxWireframes.length) {
+                const w = rapierRailPerimeterBoxWireframes.pop();
+                if (w.parent) w.parent.remove(w);
+            }
+        }
+
+        function rebuildRailInnerPerimeterBoxColliders(options = null) {
+            if (!rapierReady) return 0;
+            if (options && typeof options === 'object') Object.assign(railPerimeterBoxConfig, options);
+            clearRailInnerPerimeterBoxColliders();
+            const created = createRailInnerPerimeterBoxColliders(railPerimeterBoxConfig);
+            console.log('[Rapier] Rebuilt rail inner perimeter boxes:', created, 'with config', JSON.parse(JSON.stringify(railPerimeterBoxConfig)));
+            return created;
+        }
+
+        // Expose simple console controls for live tweaking
+        window.railBoxes = {
+            config: railPerimeterBoxConfig,
+            clear: clearRailInnerPerimeterBoxColliders,
+            rebuild: rebuildRailInnerPerimeterBoxColliders,
+            showWireframes(v) {
+                debugState.showRapierWireframes = !!v;
+                rapierTableWireframes.forEach(w => { if (w) w.visible = debugState.showRapierWireframes; });
+            }
+        };
+
+        // --- GUI for Rail Perimeter Boxes ---
+        let railBoxesGUI = null;
+        let _railBoxesRebuildTimer = null;
+        function scheduleRailBoxesRebuild() {
+            if (!rapierReady) return;
+            if (_railBoxesRebuildTimer) clearTimeout(_railBoxesRebuildTimer);
+            _railBoxesRebuildTimer = setTimeout(() => {
+                _railBoxesRebuildTimer = null;
+                rebuildRailInnerPerimeterBoxColliders();
+            }, 100);
+        }
+
+        // (Re-added) GUI setup for rail perimeter boxes
+        async function setupRailBoxesGUI() {
+            if (railBoxesGUI) return; // already created
+            try {
+                const mod = await import('./lib/lil-gui/lil-gui.esm.js');
+                const GUIClass = mod.GUI || mod.default;
+                if (!GUIClass) {
+                    console.warn('[RailBoxesGUI] lil-gui module missing entry');
+                    return;
+                }
+                railBoxesGUI = new GUIClass({ title: 'Rail Perimeter Boxes' });
+                const state = {
+                    enabled: true,
+                    showWireframes: debugState.showRapierWireframes,
+                    spacing: railPerimeterBoxConfig.spacing,
+                    bottomY: railPerimeterBoxConfig.bottomY,
+                    topY: railPerimeterBoxConfig.topY,
+                    radialDepth: railPerimeterBoxConfig.radialDepth,
+                    tangentialWidth: railPerimeterBoxConfig.tangentialWidth,
+                    normalOffset: railPerimeterBoxConfig.normalOffset
+                };
+
+                railBoxesGUI.add(state, 'enabled').name('Enabled').onChange(v => {
+                    if (v) {
+                        rebuildRailInnerPerimeterBoxColliders();
+                    } else {
+                        clearRailInnerPerimeterBoxColliders();
+                    }
+                });
+                railBoxesGUI.add(state, 'showWireframes').name('Show Wireframes').onChange(v => {
+                    debugState.showRapierWireframes = !!v;
+                    // update visibility for every existing wireframe
+                    [...rapierTableWireframes, ...rapierRailPerimeterBoxWireframes].forEach(w => { if (w) w.visible = debugState.showRapierWireframes; });
+                    rapierChips.forEach(chip => { if (chip.wireframe) chip.wireframe.visible = debugState.showRapierWireframes; });
+                });
+                railBoxesGUI.add(state, 'spacing', 0.005, 0.25, 0.005).name('Spacing').onChange(v => { railPerimeterBoxConfig.spacing = v; scheduleRailBoxesRebuild(); });
+                railBoxesGUI.add(state, 'bottomY', -5, 5, 0.005).name('Bottom Y').onChange(v => { railPerimeterBoxConfig.bottomY = v; scheduleRailBoxesRebuild(); });
+                railBoxesGUI.add(state, 'topY', -5, 5, 0.005).name('Top Y').onChange(v => { railPerimeterBoxConfig.topY = v; scheduleRailBoxesRebuild(); });
+                railBoxesGUI.add(state, 'radialDepth', 0.01, 3.0, 0.001).name('Radial Depth').onChange(v => { railPerimeterBoxConfig.radialDepth = v; scheduleRailBoxesRebuild(); });
+                railBoxesGUI.add(state, 'tangentialWidth', 0.005, 3.0, 0.001).name('Tangential W').onChange(v => { railPerimeterBoxConfig.tangentialWidth = v; scheduleRailBoxesRebuild(); });
+                railBoxesGUI.add(state, 'normalOffset', 0.0, 0.12, 0.001).name('Normal Offset').onChange(v => { railPerimeterBoxConfig.normalOffset = v; scheduleRailBoxesRebuild(); });
+                railBoxesGUI.add({ Rebuild: () => rebuildRailInnerPerimeterBoxColliders() }, 'Rebuild');
+            } catch (e) {
+                console.warn('[RailBoxesGUI] Failed to load lil-gui:', e);
+            }
+        }
+
+        // Build table static colliders (felt, rail, curb, pedestal, base + perimeter boxes)
+        function buildRapierTableParts() {
+            if (!rapierReady) {
+                console.warn('[Rapier] Table parts queued until ready');
+                return;
+            }
+            const tableOffsetY = -FELT_TOP_Y_RAPIER;
+            createRapierWireframe(table, tableOffsetY);
+            console.log('[Rapier] Table wireframe created with offset:', tableOffsetY.toFixed(4));
+            // Rail full geometry
+            const railFull = createRapierTrimeshFromMesh(rail);
+            rapierWorld.createCollider(railFull.colDesc);
+            createRapierWireframe(rail);
+            console.log('[Rapier] Rail full collider verts:', railFull.verts.length/3);
+            // Curb full geometry
+            const curbFull = createRapierTrimeshFromMesh(curb);
+            rapierWorld.createCollider(curbFull.colDesc);
+            createRapierWireframe(curb, 0, 0xff0000);
+            console.log('[Rapier] Curb full collider verts:', curbFull.verts.length/3);
+            // Perimeter boxes (face-based)
+            const boxesCreated = createRailInnerPerimeterBoxColliders(railPerimeterBoxConfig);
+            console.log('[Rapier] Rail inner perimeter boxes created:', boxesCreated);
+            // Pedestal
+            const pedestalData = createRapierTrimeshFromMesh(pedestal);
+            rapierWorld.createCollider(pedestalData.colDesc);
+            createRapierWireframe(pedestal);
+            console.log('[Rapier] Pedestal collider verts:', pedestalData.verts.length/3);
+            // Base
+            const baseData = createRapierTrimeshFromMesh(base);
+            rapierWorld.createCollider(baseData.colDesc);
+            createRapierWireframe(base);
+            console.log('[Rapier] Base collider verts:', baseData.verts.length/3);
+            // Chip holder
+            if (window.chipHolderGroup) {
+                const chipHolderData = createRapierTrimeshFromObject(window.chipHolderGroup);
+                rapierWorld.createCollider(chipHolderData.colDesc);
+                createRapierWireframeFromObject(window.chipHolderGroup);
+                console.log('[Rapier] Chip holder collider verts:', chipHolderData.verts.length/3);
+            }
+            setupRailBoxesGUI();
+        }
+
+        // Room colliders (floor + vertical boundaries) so chips can leave table and still interact
+        function buildRapierRoomSurfaces() {
+            if (!rapierReady) return;
+            // Floor collider (use floor mesh exact geometry)
+            if (typeof floor !== 'undefined') {
+                const floorData = createRapierTrimeshFromMesh(floor);
+                rapierWorld.createCollider(floorData.colDesc);
+                createRapierWireframe(floor);
+                console.log('[Rapier] Floor collider verts:', floorData.verts.length/3);
+            }
+            // Walls: aggregate groups for each wall section
+            const wallGroups = [roomBackWall, frontLeftWall, frontRightWall, roomLeftWall, roomRightWall].filter(Boolean);
+            wallGroups.forEach((wg, i) => {
+                const data = createRapierTrimeshFromObject(wg);
+                rapierWorld.createCollider(data.colDesc);
+                createRapierWireframeFromObject(wg);
+                console.log('[Rapier] Wall', i, 'verts:', data.verts.length/3);
+            });
+        }
+        
+        console.log('FELT_TOP_Y (canonical):', FELT_TOP_Y);        // --- Card Shoe ---
+        // Physical 6-deck shoe positioned on dealer's left side
+        const SHOE_WIDTH = CARD.width * 1.3;
+        const SHOE_HEIGHT = CARD.thickness * 312 * 1.5; // Enough height for 312 stacked cards
+        const SHOE_DEPTH = CARD.length * 1.2;
+        
+        // Shoe geometry - an open-topped box
+        const shoeGroup = new THREE.Group();
+        
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(SHOE_WIDTH, SHOE_HEIGHT, 0.02),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        backWall.position.set(0, SHOE_HEIGHT/2, -SHOE_DEPTH/2);
+        backWall.castShadow = true;
+        backWall.receiveShadow = true;
+        shoeGroup.add(backWall);
+        
+        // Left wall (slanted for card dispensing)
+        const leftWallGeometry = new THREE.BoxGeometry(0.02, SHOE_HEIGHT, SHOE_DEPTH);
+        const leftWall = new THREE.Mesh(
+            leftWallGeometry,
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        leftWall.position.set(-SHOE_WIDTH/2, SHOE_HEIGHT/2, 0);
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
+        shoeGroup.add(leftWall);
+        
+        // Right wall (slanted for card dispensing)
+        const rightWall = new THREE.Mesh(
+            leftWallGeometry.clone(),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        rightWall.position.set(SHOE_WIDTH/2, SHOE_HEIGHT/2, 0);
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
+        shoeGroup.add(rightWall);
+        
+        // Bottom
+        const bottom = new THREE.Mesh(
+            new THREE.BoxGeometry(SHOE_WIDTH, 0.02, SHOE_DEPTH),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        bottom.position.set(0, 0, 0);
+        bottom.castShadow = true;
+        bottom.receiveShadow = true;
+        shoeGroup.add(bottom);
+        
+        // Position shoe on dealer's left side of table
+        shoeGroup.position.set(-3.5, CARD.thickness/2 + 0.0015, -2.5);
+        scene.add(shoeGroup);
+
+        // --- Discard Tray ---
+        // Create discard tray (same as shoe but on opposite side)
+        const discardTrayGroup = new THREE.Group();
+        
+        // Back wall
+        const discardBackWall = new THREE.Mesh(
+            new THREE.BoxGeometry(SHOE_WIDTH, SHOE_HEIGHT, 0.02),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        discardBackWall.position.set(0, SHOE_HEIGHT/2, -SHOE_DEPTH/2);
+        discardBackWall.castShadow = true;
+        discardBackWall.receiveShadow = true;
+        discardTrayGroup.add(discardBackWall);
+        
+        // Left wall
+        const discardLeftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(0.02, SHOE_HEIGHT, SHOE_DEPTH),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        discardLeftWall.position.set(-SHOE_WIDTH/2, SHOE_HEIGHT/2, 0);
+        discardLeftWall.castShadow = true;
+        discardLeftWall.receiveShadow = true;
+        discardTrayGroup.add(discardLeftWall);
+        
+        // Right wall
+        const discardRightWall = new THREE.Mesh(
+            new THREE.BoxGeometry(0.02, SHOE_HEIGHT, SHOE_DEPTH),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        discardRightWall.position.set(SHOE_WIDTH/2, SHOE_HEIGHT/2, 0);
+        discardRightWall.castShadow = true;
+        discardRightWall.receiveShadow = true;
+        discardTrayGroup.add(discardRightWall);
+        
+        // Bottom
+        const discardBottom = new THREE.Mesh(
+            new THREE.BoxGeometry(SHOE_WIDTH, 0.02, SHOE_DEPTH),
+            new THREE.MeshStandardMaterial({ color: 0x2c1810, roughness: 0.8 })
+        );
+        discardBottom.position.set(0, 0, 0);
+        discardBottom.castShadow = true;
+        discardBottom.receiveShadow = true;
+        discardTrayGroup.add(discardBottom);
+        
+        // Position discard tray on dealer's right side of table (opposite of shoe)
+        discardTrayGroup.position.set(3.5, CARD.thickness/2 + 0.0015, -2.5);
+        scene.add(discardTrayGroup);
+
+        // --- Discard Tray Physics Bodies ---
+        const discardPhysicsPos = discardTrayGroup.position;
+        
+        // Bottom physics body
+        const discardBottomShape = new CANNON.Box(new CANNON.Vec3(SHOE_WIDTH/2, 0.01, SHOE_DEPTH/2));
+        const discardBottomBody = new CANNON.Body({
+            mass: 0,
+            shape: discardBottomShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(discardPhysicsPos.x, discardPhysicsPos.y, discardPhysicsPos.z)
+        });
+        world.addBody(discardBottomBody);
+        
+        // Back wall physics body
+        const discardBackShape = new CANNON.Box(new CANNON.Vec3(SHOE_WIDTH/2, SHOE_HEIGHT/2, 0.01));
+        const discardBackBody = new CANNON.Body({
+            mass: 0,
+            shape: discardBackShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(discardPhysicsPos.x, discardPhysicsPos.y + SHOE_HEIGHT/2, discardPhysicsPos.z - SHOE_DEPTH/2)
+        });
+        world.addBody(discardBackBody);
+        
+        // Left wall physics body
+        const discardLeftShape = new CANNON.Box(new CANNON.Vec3(0.01, SHOE_HEIGHT/2, SHOE_DEPTH/2));
+        const discardLeftBody = new CANNON.Body({
+            mass: 0,
+            shape: discardLeftShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(discardPhysicsPos.x - SHOE_WIDTH/2, discardPhysicsPos.y + SHOE_HEIGHT/2, discardPhysicsPos.z)
+        });
+        world.addBody(discardLeftBody);
+        
+        // Right wall physics body
+        const discardRightShape = new CANNON.Box(new CANNON.Vec3(0.01, SHOE_HEIGHT/2, SHOE_DEPTH/2));
+        const discardRightBody = new CANNON.Body({
+            mass: 0,
+            shape: discardRightShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(discardPhysicsPos.x + SHOE_WIDTH/2, discardPhysicsPos.y + SHOE_HEIGHT/2, discardPhysicsPos.z)
+        });
+        world.addBody(discardRightBody);
+
+        // --- Shoe Physics Bodies ---
+        const shoePhysicsPos = shoeGroup.position;
+        
+        // Bottom physics body
+        const shoeBottomShape = new CANNON.Box(new CANNON.Vec3(SHOE_WIDTH/2, 0.01, SHOE_DEPTH/2));
+        const shoeBottomBody = new CANNON.Body({
+            mass: 0, // Static
+            shape: shoeBottomShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(shoePhysicsPos.x, shoePhysicsPos.y, shoePhysicsPos.z)
+        });
+        world.addBody(shoeBottomBody);
+        
+        // Back wall physics body
+        const shoeBackShape = new CANNON.Box(new CANNON.Vec3(SHOE_WIDTH/2, SHOE_HEIGHT/2, 0.01));
+        const shoeBackBody = new CANNON.Body({
+            mass: 0,
+            shape: shoeBackShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(shoePhysicsPos.x, shoePhysicsPos.y + SHOE_HEIGHT/2, shoePhysicsPos.z - SHOE_DEPTH/2)
+        });
+        world.addBody(shoeBackBody);
+        
+        // Left wall physics body
+        const shoeLeftShape = new CANNON.Box(new CANNON.Vec3(0.01, SHOE_HEIGHT/2, SHOE_DEPTH/2));
+        const shoeLeftBody = new CANNON.Body({
+            mass: 0,
+            shape: shoeLeftShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(shoePhysicsPos.x - SHOE_WIDTH/2, shoePhysicsPos.y + SHOE_HEIGHT/2, shoePhysicsPos.z)
+        });
+        world.addBody(shoeLeftBody);
+        
+        // Right wall physics body
+        const shoeRightShape = new CANNON.Box(new CANNON.Vec3(0.01, SHOE_HEIGHT/2, SHOE_DEPTH/2));
+        const shoeRightBody = new CANNON.Body({
+            mass: 0,
+            shape: shoeRightShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(shoePhysicsPos.x + SHOE_WIDTH/2, shoePhysicsPos.y + SHOE_HEIGHT/2, shoePhysicsPos.z)
+        });
+        world.addBody(shoeRightBody);
+
+        // Helper function to create wireframe visualization for physics body
+        // Optionally pass shapeOrientation (CANNON.Quaternion) and shapeOffset (CANNON.Vec3)
+        function createPhysicsWireframe(body, shape, shapeOrientation = null, shapeOffset = null) {
+            let geometry;
+            
+            if (shape instanceof CANNON.Box) {
+                const halfExtents = shape.halfExtents;
+                geometry = new THREE.BoxGeometry(
+                    halfExtents.x * 2,
+                    halfExtents.y * 2,
+                    halfExtents.z * 2
+                );
+            } else if (shape instanceof CANNON.Cylinder) {
+                // Extract dimensions robustly; some Cannon builds don't expose radiusTop/height
+                const hasShapeRTop = Number.isFinite(shape.radiusTop);
+                const hasShapeRBot = Number.isFinite(shape.radiusBottom);
+                const hasShapeH = Number.isFinite(shape.height);
+
+                const fallbackRadius = (body && body.userData && Number.isFinite(body.userData.radius)) ? body.userData.radius : 0.1;
+                const fallbackHeight = (body && body.userData && Number.isFinite(body.userData.height)) ? body.userData.height : 0.02;
+
+                const rTop = hasShapeRTop ? shape.radiusTop : fallbackRadius;
+                const rBot = hasShapeRBot ? shape.radiusBottom : fallbackRadius;
+                const h = hasShapeH ? shape.height : fallbackHeight;
+
+                console.log('Wireframe Cylinder dims ->', { rTop, rBot, h, from: {
+                    radiusTop: hasShapeRTop ? 'shape' : 'fallback',
+                    radiusBottom: hasShapeRBot ? 'shape' : 'fallback',
+                    height: hasShapeH ? 'shape' : 'fallback'
+                }});
+
+                // Use 16 radial segments for cylinder wireframe
+                geometry = new THREE.CylinderGeometry(
+                    rTop,
+                    rBot,
+                    h,
+                    16
+                );
+                // Note: Cannon.js cylinders are Y-axis aligned; we rely on body.quaternion for orientation
+            } else if (shape instanceof CANNON.Trimesh) {
+                // Reconstruct Three.js geometry from Trimesh vertices/indices
+                const positions = new Float32Array(shape.vertices.length);
+                for (let i = 0; i < shape.vertices.length; i++) positions[i] = shape.vertices[i];
+                const indices = new (shape.indices.length > 65535 ? Uint32Array : Uint16Array)(shape.indices.length);
+                for (let i = 0; i < shape.indices.length; i++) indices[i] = shape.indices[i];
+
+                geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                geometry.computeVertexNormals();
+                } else if (shape instanceof CANNON.ConvexPolyhedron) {
+                    // Reconstruct Three.js geometry from ConvexPolyhedron vertices/faces
+                    const positions = [];
+                    const indices = [];
+                
+                    // Convert CANNON.Vec3 vertices to flat array
+                    for (let i = 0; i < shape.vertices.length; i++) {
+                        const v = shape.vertices[i];
+                        positions.push(v.x, v.y, v.z);
+                    }
+                
+                    // Convert faces to triangle indices
+                    for (let i = 0; i < shape.faces.length; i++) {
+                        const face = shape.faces[i];
+                        // Triangulate the face (assuming convex polygons)
+                        for (let j = 1; j < face.length - 1; j++) {
+                            indices.push(face[0], face[j], face[j + 1]);
+                        }
+                    }
+                
+                    geometry = new THREE.BufferGeometry();
+                    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+                    geometry.setIndex(indices);
+                    geometry.computeVertexNormals();
+                
+                    console.log('Created ConvexPolyhedron wireframe:', positions.length / 3, 'vertices,', indices.length / 3, 'triangles');
+            }
+            
+            if (!geometry) return; // Skip if shape not supported
+            
+            // Create a group to represent the body's transform
+            const group = new THREE.Group();
+            group.position.copy(body.position);
+            group.quaternion.copy(body.quaternion);
+            group.visible = debugState.showCannonWireframes;
+
+            const edgesMesh = new THREE.LineSegments(
+                new THREE.EdgesGeometry(geometry),
+                new THREE.LineBasicMaterial({ color: 0x00ff00 })
+            );
+
+            // Apply shape-local orientation/offset if provided (e.g., rotated shapes)
+            // Note: Three.js CylinderGeometry is already Y-axis aligned.
+            // If the physics used a Cannon cylinder with a local rotation to become Y-aligned,
+            // we should NOT apply that rotation to the Three wireframe cylinder, otherwise it
+            // will appear upright again. So skip orientation for cylinders.
+            if (shapeOrientation && !(shape instanceof CANNON.Cylinder)) {
+                edgesMesh.quaternion.set(
+                    shapeOrientation.x,
+                    shapeOrientation.y,
+                    shapeOrientation.z,
+                    shapeOrientation.w
+                );
+            }
+            if (shapeOffset) {
+                edgesMesh.position.set(shapeOffset.x, shapeOffset.y, shapeOffset.z);
+            }
+
+            group.add(edgesMesh);
+            // Remove triangles variant (deprecated)
+            scene.add(group);
+            cannonWireframes.push({ wireframe: group, body });
+            
+            return group;
+        }
+
+        // Create wireframes for all physics bodies
+        // (Table parts now use Rapier, no Cannon wireframes needed)
+        // Shoe wireframes
+        createPhysicsWireframe(shoeBottomBody, shoeBottomShape);
+        createPhysicsWireframe(shoeBackBody, shoeBackShape);
+        createPhysicsWireframe(shoeLeftBody, shoeLeftShape);
+        createPhysicsWireframe(shoeRightBody, shoeRightShape);
+        createPhysicsWireframe(discardBottomBody, discardBottomShape);
+        createPhysicsWireframe(discardBackBody, discardBackShape);
+        createPhysicsWireframe(discardLeftBody, discardLeftShape);
+        createPhysicsWireframe(discardRightBody, discardRightShape);
+        
+        // Room physics wireframes
+        createPhysicsWireframe(floorBody, floorShape);
+        createPhysicsWireframe(ceilingBody, ceilingShape);
+        createPhysicsWireframe(backWallBody, backWallShape);
+        createPhysicsWireframe(frontLeftWallBody, frontLeftWallShape);
+        createPhysicsWireframe(frontRightWallBody, frontRightWallShape);
+        createPhysicsWireframe(leftWallBody, leftWallShape);
+        createPhysicsWireframe(rightWallBody, rightWallShape);
+        
+        // Shelf physics wireframes
+        shelfBodies.forEach(shelf => {
+            createPhysicsWireframe(shelf.body, shelf.shape);
+        });
+
+        // --- Card Deck and Game State ---
+        const suits = ['♠', '♥', '♦', '♣'];
+        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        
+        let deck = [];
+        let dealerHand = [];
+        let playerHand = [];
+        let gameInProgress = false;
+        let lastResult = null; // 'player' | 'dealer' | 'push' | 'blackjack-player' | 'blackjack-dealer' | 'blackjack-push'
+        const handHistory = []; // store recent hand summaries
+        const MAX_HISTORY = 8;
+
+        // Physical shoe cards
+        let shoeCards = []; // Array of {card: {suit, rank}, mesh: THREE.Group, body: CANNON.Body}
+        let dealtCards = []; // Array of cards that have been dealt (no longer in shoe)
+        let discardedCards = []; // Array of cards in the discard tray
+        let redCardIndex = -1; // Position of the red cut card in the shoe
+        let isShuffling = false;
+        let needsReshuffle = false; // Flag to track if we need to reshuffle before next hand
+
+        // Card objects in scene (dealt cards)
+        let cardMeshes = [];
+
+        // --- Chip System ---
+        let draggedChip = null; // Currently dragged chip
+            let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -DRAG_PLANE_Y); // Horizontal plane at drag height
+            // Easing for gentle rise
+            function easeOutCubic(t){ t = Math.min(Math.max(t,0),1); return 1 - Math.pow(1 - t, 3); }
+        let dragOffset = new THREE.Vector3();
+        const raycaster = new THREE.Raycaster();
+        const _dragPlaneIntersect = new THREE.Vector3();
+        const mouse = new THREE.Vector2();
+        
+        // Bet zone configuration (circular area in front of player)
+        const BET_ZONE = {
+            center: { x: 0, z: 0.55 }, // In front of player
+            radius: 0.45, // Radius of betting circle
+            y: FELT_TOP_Y +.005 // Surface level at felt top
+        };
+        
+        // Player chip stockpile area (where chips start)
+        const STOCKPILE_ZONE = {
+            center: { x: 0, z: 2.2 }, // Closer to player
+            y: FELT_TOP_Y // Surface level at felt top
+        };
+
+        // Create card back texture (classic playing card back design)
+        function createCardBackTexture() {
+            const canvas = document.createElement('canvas');
+            // Use a single high-quality back texture (2048x3072) - only one instance in memory
+            canvas.width = 2048; // 8x of 256
+            canvas.height = 3072; // 8x of 384
+            const ctx = canvas.getContext('2d');
+            
+            // Background color (classic blue)
+            ctx.fillStyle = '#0a4a8a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // White border (scaled proportionally)
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 64; // 8x from 8
+            ctx.strokeRect(96, 96, canvas.width - 192, canvas.height - 192); // 8x from 12,24
+            
+            // Inner decorative border (scaled)
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 24; // 8x from 3
+            ctx.strokeRect(192, 192, canvas.width - 384, canvas.height - 384); // 8x from 24,48
+            
+            // Create diamond/geometric pattern
+            ctx.strokeStyle = '#ffffff';
+            ctx.fillStyle = '#ffffff';
+            ctx.lineWidth = 16; // 8x from 2
+            
+            // Central ornate design
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Draw decorative circles and patterns (scaled)
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2;
+                const radius = 480; // 8x from 60
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 64, 0, Math.PI * 2); // 8x from 8
+                ctx.fill();
+            }
+            
+            // Center circle (scaled)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 200, 0, Math.PI * 2); // 8x from 25
+            ctx.stroke();
+            ctx.lineWidth = 32; // 8x from 4
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 120, 0, Math.PI * 2); // 8x from 15
+            ctx.fill();
+            
+            // Diamond pattern in corners (scaled)
+            function drawCornerDiamond(x, y, size) {
+                ctx.beginPath();
+                ctx.moveTo(x, y - size);
+                ctx.lineTo(x + size, y);
+                ctx.lineTo(x, y + size);
+                ctx.lineTo(x - size, y);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y - size/2);
+                ctx.lineTo(x + size/2, y);
+                ctx.lineTo(x, y + size/2);
+                ctx.lineTo(x - size/2, y);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            ctx.lineWidth = 16; // 8x from 2
+            drawCornerDiamond(480, 480, 160); // 8x from 60,60,20
+            drawCornerDiamond(canvas.width - 480, 480, 160);
+            drawCornerDiamond(480, canvas.height - 480, 160);
+            
+            // Curved decorative lines (scaled)
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 24; // 8x from 3
+            for (let i = 0; i < 4; i++) {
+                const offset = 640 + i * 120; // 8x from 80,15
+                ctx.beginPath();
+                ctx.moveTo(centerX - offset, 320); // 8x from 40
+                ctx.quadraticCurveTo(centerX, centerY - 320, centerX + offset, 320); // 8x from 40
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(centerX - offset, canvas.height - 320); // 8x from 40
+                ctx.quadraticCurveTo(centerX, centerY + 320, centerX + offset, canvas.height - 320); // 8x from 40
+                ctx.stroke();
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.anisotropy = CARD_TEXTURE_ANISO;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.generateMipmaps = true;
+            return texture;
+        }
+
+        const cardBackTexture = createCardBackTexture();
+
+        // --- Chip Creation Functions ---
+        function createChipTexture(chipType) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = canvas.width / 2 - 4;
+            
+            // Main chip color
+            ctx.fillStyle = `#${chipType.color.toString(16).padStart(6, '0')}`;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Edge spots (8 spots around perimeter)
+            ctx.fillStyle = `#${chipType.edgeColor.toString(16).padStart(6, '0')}`;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const spotX = centerX + Math.cos(angle) * (radius * 0.8);
+                const spotY = centerY + Math.sin(angle) * (radius * 0.8);
+                ctx.beginPath();
+                ctx.arc(spotX, spotY, radius * 0.15, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Center circle (inlay)
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Value text
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(chipType.label, centerX, centerY);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.anisotropy = CARD_TEXTURE_ANISO;
+            return texture;
+        }
+
+        // Cannon createChip removed - chips now use Rapier only via createRapierValueChip
+
+        // Create a 6-deck shoe (312 cards total)
+        function create6DeckShoe() {
+            const deckData = [];
+            // Create 6 decks in perfect order
+            for (let deckNum = 0; deckNum < 6; deckNum++) {
+                for (let suit of suits) {
+                    for (let rank of ranks) {
+                        deckData.push({ suit, rank });
+                    }
+                }
+            }
+            return deckData;
+        }
+
+        // Cache for face textures to avoid regenerating duplicates
+        const faceTextureCache = new Map(); // key: `${rank}-${suit}@${res}` -> THREE.CanvasTexture
+
+        // --- Custom shader anisotropy boost (multi-tap sampling along screen-space gradient) ---
+        let ANISO_BOOST = 1.0; // scales how far we sample along the gradient (0 = off)
+        const customAnisoMaterials = [];
+        
+        function applyCustomAnisoToMaterial(mat) {
+            mat.onBeforeCompile = (shader) => {
+                shader.uniforms.uAnisoBoost = { value: ANISO_BOOST };
+                // Use vMapUv (the UV used by standard map sampling in recent Three.js)
+                const injection = `#include <map_fragment>
+#ifdef USE_MAP
+if (uAnisoBoost > 0.001) {
+    vec2 dx = dFdx( vMapUv );
+    vec2 dy = dFdy( vMapUv );
+    vec2 dir = ( dot(dx,dx) > dot(dy,dy) ) ? dx : dy;
+    // Small, angle-independent step to avoid streaking/banding
+    vec2 stepDir = normalize(dir) * (uAnisoBoost * 0.0007);
+    vec3 anisoRGB =
+          texture2D( map, vMapUv - 2.0 * stepDir ).rgb * 0.12 +
+          texture2D( map, vMapUv - 1.0 * stepDir ).rgb * 0.20 +
+          texture2D( map, vMapUv                 ).rgb * 0.36 +
+          texture2D( map, vMapUv + 1.0 * stepDir ).rgb * 0.20 +
+          texture2D( map, vMapUv + 2.0 * stepDir ).rgb * 0.12;
+    float blend = clamp( uAnisoBoost / 3.0, 0.0, 1.0 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, anisoRGB, blend );
+}
+#endif`;
+                shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', injection);
+                // Ensure the uniform is declared in the fragment shader
+                shader.fragmentShader = 'uniform float uAnisoBoost;\n' + shader.fragmentShader;
+                mat.userData._shader = shader;
+            };
+            customAnisoMaterials.push(mat);
+            mat.needsUpdate = true;
+        }
+
+        function setAnisoBoost(v) {
+            ANISO_BOOST = Math.max(0.0, v);
+            customAnisoMaterials.forEach((m) => {
+                if (m.userData && m.userData._shader) {
+                    m.userData._shader.uniforms.uAnisoBoost.value = ANISO_BOOST;
+                }
+            });
+        }
+
+        function getFaceMaterial(card, res = '1k') {
+            const key = `${card.rank}-${card.suit}@${res}`;
+            let tex = faceTextureCache.get(key);
+            if (!tex) {
+                const canvas = document.createElement('canvas');
+                // Choose resolution per requested quality
+                if (res === '2k') {
+                    canvas.width = 2048;
+                    canvas.height = 3072;
+                } else {
+                    canvas.width = 1024;
+                    canvas.height = 1536;
+                }
+                const ctx = canvas.getContext('2d');
+                const isRed = card.suit === '♥' || card.suit === '♦';
+                // Background
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Border
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = (res === '2k') ? 32 : 16;
+                const pad = (res === '2k') ? 64 : 32;
+                ctx.strokeRect(pad, pad, canvas.width - pad*2, canvas.height - pad*2);
+                // Rank and suit
+                ctx.fillStyle = isRed ? '#cc0000' : '#000000';
+                ctx.font = `bold ${res === '2k' ? 640 : 320}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const cx = (res === '2k') ? 512 : 256;
+                ctx.fillText(card.rank, cx, (res === '2k') ? 640 : 320);
+                ctx.fillText(card.suit, cx, (res === '2k') ? 1280 : 640);
+                tex = new THREE.CanvasTexture(canvas);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                tex.anisotropy = CARD_TEXTURE_ANISO;
+                tex.minFilter = THREE.LinearMipmapLinearFilter;
+                tex.magFilter = THREE.LinearFilter;
+                tex.generateMipmaps = true;
+                faceTextureCache.set(key, tex);
+            }
+            const mat = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide });
+            applyCustomAnisoToMaterial(mat);
+            return mat;
+        }
+
+        // Ensure a shoe card has its face material applied (used when dealing)
+        function ensureCardFaceMaterial(shoeCard, res = '1k') {
+            if (!shoeCard || !shoeCard.card || !shoeCard.mesh) return;
+            const mesh = shoeCard.mesh.children.find(c => c.isMesh);
+            if (!mesh) return;
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            // Index 2 is top (face)
+            const faceMat = mats[2];
+            const hasMap = faceMat && faceMat.map;
+            if (!hasMap) {
+                mats[2] = getFaceMaterial(shoeCard.card, res);
+                mesh.material = mats;
+                mesh.material.needsUpdate = true;
+            }
+        }
+
+        // Create physical card mesh and body
+        function createPhysicalCard(card, position, isRedCard = false, deferFace = false) {
+            const cardGroup = new THREE.Group();
+            
+            const cardGeom = new THREE.BoxGeometry(CARD.width, CARD.thickness, CARD.length);
+            
+            if (isRedCard) {
+                // Red cut card
+                const cardMat = new THREE.MeshStandardMaterial({
+                    color: 0xff0000,
+                    roughness: 0.3,
+                    metalness: 0.1
+                });
+                const cardMesh = new THREE.Mesh(cardGeom, cardMat);
+                cardMesh.castShadow = true;
+                cardMesh.receiveShadow = true;
+                cardGroup.add(cardMesh);
+            } else {
+                // Regular card with texture
+                const isRed = card.suit === '♥' || card.suit === '♦';
+                const faceMat = deferFace ? new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }) : getFaceMaterial(card, '2k');
+                
+                const backMat = new THREE.MeshStandardMaterial({
+                    map: cardBackTexture,
+                    roughness: 0.3,
+                    metalness: 0.1,
+                    side: THREE.DoubleSide
+                });
+                applyCustomAnisoToMaterial(backMat);
+                
+                const edgeMat = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.3,
+                    metalness: 0.1,
+                    side: THREE.DoubleSide
+                });
+                
+                // Apply texture to top face (face) and bottom face (back)
+                const cardWithTexture = new THREE.Mesh(cardGeom, [
+                    edgeMat, // right
+                    edgeMat, // left
+                    faceMat, // top (face)
+                    backMat, // bottom (back)
+                    edgeMat, // front
+                    edgeMat  // back
+                ]);
+                cardWithTexture.castShadow = true;
+                cardWithTexture.receiveShadow = true;
+                cardGroup.add(cardWithTexture);
+            }
+            
+            cardGroup.position.set(position.x, position.y, position.z);
+            // Rotate cards face down in the shoe (180° around X-axis so card back faces up)
+            if (!isRedCard) {
+                cardGroup.rotation.x = Math.PI;
+            }
+            scene.add(cardGroup);
+            
+            // Physics body
+            const shape = new CANNON.Box(new CANNON.Vec3(CARD.width/2, CARD.thickness/2, CARD.length/2));
+            const body = new CANNON.Body({
+                mass: 0, // Start as kinematic (frozen) - will be made dynamic when drawn
+                shape: shape,
+                material: physCardMaterial,
+                position: new CANNON.Vec3(position.x, position.y, position.z),
+                linearDamping: 0.5,
+                angularDamping: 0.5
+            });
+            // Match body rotation to mesh rotation (face down)
+            if (!isRedCard) {
+                body.quaternion.setFromEuler(Math.PI, 0, 0);
+            }
+            world.addBody(body);
+            
+            return { mesh: cardGroup, body: body };
+        }
+
+        // Global reference to cut card (kept outside deck until insertion)
+        let cutCardObj = null;
+
+        // Initialize shoe with 312 stacked cards (no cut card inserted here on initial load)
+    function initializeShoe() {
+            // Clear existing shoe cards
+            for (let sc of shoeCards) {
+                scene.remove(sc.mesh);
+                world.removeBody(sc.body);
+            }
+            shoeCards = [];
+            
+            const deckData = create6DeckShoe();
+            const shoePos = shoeGroup.position;
+            
+            // Stack cards in the shoe
+            for (let i = 0; i < deckData.length; i++) {
+                const yOffset = i * CARD.thickness;
+                const position = {
+                    x: shoePos.x,
+                    y: shoePos.y + yOffset,
+                    z: shoePos.z
+                };
+                
+                const physCard = createPhysicalCard(deckData[i], position, false, true); // defer face texture for shoe
+                shoeCards.push({
+                    card: deckData[i],
+                    mesh: physCard.mesh,
+                    body: physCard.body
+                });
+            }
+            
+            // Create (or recreate) cut card positioned on felt in front of shoe (not in shoeCards yet)
+            const frontZ = shoePos.z + (SHOE_DEPTH / 2) + CARD.length * 0.9;
+            const frontPos = { x: shoePos.x, y: CARD.thickness/2 + 0.0015, z: frontZ };
+            if (cutCardObj) {
+                scene.remove(cutCardObj.mesh);
+                world.removeBody(cutCardObj.body);
+            }
+            const physCut = createPhysicalCard({ suit: '', rank: 'CUT' }, frontPos, true);
+            cutCardObj = { card: { suit: '', rank: 'CUT' }, mesh: physCut.mesh, body: physCut.body, isRedCard: true };
+            redCardIndex = -1; // not inserted yet
+        }
+
+        // Shuffle the shoe - instant reordering since cards are kinematic
+        // Helper for planar slide tween (linear X/Z move at constant Y)
+        function addSlideTween(sc, fromX, fromZ, toX, toZ, y, duration = 260) {
+            const startTime = performance.now();
+            activeTweens.push({
+                sc,
+                slide: true,
+                fromX,
+                fromZ,
+                toX,
+                toZ,
+                y,
+                duration,
+                start: startTime
+            });
+        }
+
+        // Card dealing animation tween (slide + arc + flip)
+        function addCardDealTween(sc, fromPos, toPos, duration = 800, flipDuration = 300, stayFaceDown = false) {
+            const startTime = performance.now();
+            activeTweens.push({
+                sc,
+                deal: true,
+                fromPos: { ...fromPos },
+                toPos: { ...toPos },
+                duration,
+                flipDuration,
+                start: startTime,
+                arcHeight: 0.5, // Arc height for the card's flight path
+                stayFaceDown: stayFaceDown // Whether card should stay face down
+            });
+        }
+
+        function shuffleShoe(initialLoad = false) {
+            if (isShuffling) return;
+            isShuffling = true;
+            
+            updateStatus('Shuffling shoe...');
+            
+            // Animate camera to shoe for cinematic view
+            animateCameraToShoe(st(1000));
+            
+            const shoePos = shoeGroup.position;
+            
+            // 1) If cut card exists in shoe, animate it out and temporarily remove it from array
+            const existingCutIdx = shoeCards.findIndex(sc => sc.isRedCard);
+            if (existingCutIdx !== -1) {
+                // Removal during reshuffle
+                cutCardObj = shoeCards.splice(existingCutIdx, 1)[0];
+                const liftY = shoePos.y + (shoeCards.length + 8) * CARD.thickness;
+                const parkX = shoePos.x + CARD.width * 1.4; // park to side
+                addShuffleTween(cutCardObj, liftY, { duration: st(300), bump: 0.05, swayX: (parkX - cutCardObj.body.position.x) * 0.06 });
+                setTimeout(() => {
+                    cutCardObj.body.position.set(parkX, liftY, shoePos.z);
+                    cutCardObj.mesh.position.copy(cutCardObj.body.position);
+                }, st(320));
+            } else if (initialLoad && cutCardObj) {
+                // On initial load the cut card starts on felt in front; leave it there until insertion phase
+            }
+            
+            // We will perform a series of small localized shuffles (packet moves)
+            const PACKET_SIZE_MIN = 3;
+            const PACKET_SIZE_MAX = 16;
+            const MOVES = 120; // more packet moves for stronger randomness
+            const operations = [];
+            for (let m = 0; m < MOVES; m++) {
+                const size = Math.floor(Math.random() * (PACKET_SIZE_MAX - PACKET_SIZE_MIN + 1)) + PACKET_SIZE_MIN;
+                const startIdx = Math.floor(Math.random() * Math.max(1, shoeCards.length - size));
+                let insertIdx = Math.floor(Math.random() * shoeCards.length);
+                if (insertIdx >= startIdx && insertIdx <= startIdx + size) {
+                    insertIdx = (insertIdx + size + 5) % shoeCards.length; // avoid noop move
+                }
+                operations.push({ startIdx, size, insertIdx });
+                // Occasionally schedule a cut operation marker
+                if (m % 15 === 14) operations.push({ cut: true });
+            }
+
+            let opIndex = 0;
+            function performNextOp() {
+                if (opIndex >= operations.length) {
+                    // Final tidy placement animation to reflect the order resulting from packet moves (real shuffle)
+                    shoeCards.forEach((sc, idx) => {
+                        const targetY = shoePos.y + idx * CARD.thickness;
+                        addShuffleTween(sc, targetY, { duration: st(220), bump: 0.02, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.35 });
+                    });
+                    // After settle, insert cut card back at 20-30%
+                    setTimeout(() => {
+                        let insertPct = 0.2 + Math.random() * 0.1; // 20-30%
+                        let insertIndex = Math.min(shoeCards.length, Math.max(0, Math.floor(shoeCards.length * insertPct)));
+                        if (cutCardObj) {
+                            const targetY = shoePos.y + insertIndex * CARD.thickness;
+                            const finalX = shoePos.x; // deck x center
+                            const finalZ = shoePos.z; // deck z center
+                            const startX = cutCardObj.body.position.x;
+                            const startZ = cutCardObj.body.position.z;
+                            // Phase 1: vertical align (retain current X/Z)
+                            addShuffleTween(cutCardObj, targetY, { duration: st(340), bump: 0.05, swayX: 0 });
+                            // Phase 2: planar slide (X/Z) into stack
+                            setTimeout(() => {
+                                if (!shoeCards.includes(cutCardObj)) {
+                                    shoeCards.splice(insertIndex, 0, cutCardObj);
+                                }
+                                addSlideTween(cutCardObj, startX, startZ, finalX, finalZ, targetY, st(340));
+                            }, st(350));
+                        }
+                        // Update index tracking and finish
+                        redCardIndex = shoeCards.findIndex(sc => sc.isRedCard);
+                        setTimeout(() => {
+                            isShuffling = false;
+                            updateStatus('Shuffle complete!');
+                            // Animate camera back to original position
+                            animateCameraBack(st(1200));
+                            setTimeout(() => updateStatus(''), st(1200));
+                        }, st(360));
+                    }, st(260));
+                    return;
+                }
+                const op = operations[opIndex++];
+                if (op.cut) {
+                    // Perform a random cut: take top k cards and move to bottom
+                    const k = Math.floor(shoeCards.length * (0.2 + Math.random()*0.3)); // 20-50%
+                    const top = shoeCards.splice(shoeCards.length - k, k); // top is at end
+                    shoeCards.unshift(...top);
+                    // Animate all cards to their new Y to reflect the cut
+                    shoeCards.forEach((sc, idx) => {
+                        const targetY = shoePos.y + idx * CARD.thickness;
+                        addShuffleTween(sc, targetY, { duration: st(240), bump: 0.02, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.25 });
+                    });
+                } else {
+                    const packet = shoeCards.splice(op.startIdx, op.size);
+                    // Insert packet
+                    const clampedInsert = Math.min(op.insertIdx, shoeCards.length);
+                    shoeCards.splice(clampedInsert, 0, ...packet);
+                    // Animate only moved packet to new vertical positions
+                    packet.forEach((sc, localIdx) => {
+                        const globalIdx = clampedInsert + localIdx;
+                        const targetY = shoePos.y + globalIdx * CARD.thickness;
+                        addShuffleTween(sc, targetY, { duration: st(300), bump: 0.04, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.15 });
+                    });
+                }
+                // Schedule next op
+                {
+                    const delay = (30 + Math.random()*40) * SHUFFLE_TIME_SCALE;
+                    setTimeout(performNextOp, Math.max(10, delay)); // varied cadence between moves, scaled
+                }
+            }
+            performNextOp();
+        }
+
+        function createDeck() {
+            deck = [];
+            for (let suit of suits) {
+                for (let rank of ranks) {
+                    deck.push({ suit, rank });
+                }
+            }
+            // Shuffle
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+        }
+
+        function getCardValue(card) {
+            if (card.rank === 'A') return 11;
+            if (['J', 'Q', 'K'].includes(card.rank)) return 10;
+            return parseInt(card.rank);
+        }
+
+        function calculateHandValue(hand) {
+            let value = 0;
+            let aces = 0;
+            
+            for (let card of hand) {
+                const cardValue = getCardValue(card);
+                value += cardValue;
+                if (card.rank === 'A') aces++;
+            }
+            
+            // Adjust for aces
+            while (value > 21 && aces > 0) {
+                value -= 10;
+                aces--;
+            }
+            
+            return value;
+        }
+
+        function createCard(card, position, rotation = { x: 0, y: 0, z: 0 }) {
+            const cardGroup = new THREE.Group();
+            
+            // Card geometry (sized to real-world proportions relative to the table)
+            const cardGeom = new THREE.BoxGeometry(CARD.width, CARD.thickness, CARD.length);
+            const cardMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 0.3,
+                metalness: 0.1
+            });
+            const cardMesh = new THREE.Mesh(cardGeom, cardMat);
+            cardMesh.castShadow = true;
+            cardMesh.receiveShadow = true;
+            cardGroup.add(cardMesh);
+
+            // Card text (rank and suit)
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 384;
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Border
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+            
+            // Rank and suit
+            const isRed = card.suit === '♥' || card.suit === '♦';
+            ctx.fillStyle = isRed ? '#cc0000' : '#000000';
+            // Scale font relative to card aspect ratio to remain readable at realistic size
+            ctx.font = 'bold 120px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(card.rank, canvas.width / 2, canvas.height / 3);
+            ctx.font = 'bold 100px Arial';
+            ctx.fillText(card.suit, canvas.width / 2, canvas.height * 2 / 3);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const faceMat = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.3,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            
+            const backMat = new THREE.MeshStandardMaterial({
+                map: cardBackTexture,
+                roughness: 0.3,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            
+            const edgeMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 0.3,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            
+            // Apply texture to top face
+            const cardWithTexture = new THREE.Mesh(cardGeom, [
+                edgeMat, // right
+                edgeMat, // left
+                faceMat, // top (face)
+                backMat, // bottom (back)
+                edgeMat, // front
+                edgeMat  // back
+            ]);
+            cardWithTexture.castShadow = true;
+            cardWithTexture.receiveShadow = true;
+            
+            cardGroup.remove(cardMesh);
+            cardGroup.add(cardWithTexture);
+            
+            cardGroup.position.set(position.x, position.y, position.z);
+            cardGroup.rotation.set(rotation.x, rotation.y, rotation.z);
+            
+            scene.add(cardGroup);
+            cardMeshes.push(cardGroup);
+            
+            return cardGroup;
+        }
+
+        function clearCards() {
+            // Move dealt cards to discard (don't remove from scene)
+            // This function is now only called when we want to completely clear everything
+            for (let dealtCard of dealtCards) {
+                scene.remove(dealtCard.mesh);
+                world.removeBody(dealtCard.body);
+            }
+            dealtCards = [];
+            cardMeshes = [];
+        }
+
+        // Animate cards sliding to discard tray
+        function discardCardsToTray(callback) {
+            if (dealtCards.length === 0) {
+                if (callback) callback();
+                return;
+            }
+
+            const discardPos = discardTrayGroup.position;
+            const targetX = discardPos.x;
+            const targetZ = discardPos.z;
+            // Discard tray bottom mesh is at (0, 0, 0) within group with height 0.02
+            // Top of bottom surface is at group.y + 0.01 (half of 0.02)
+            // Then add half card thickness so card center sits on top of tray bottom
+            const trayBottomTopY = discardPos.y + 0.01 + CARD.thickness / 2;
+
+            let cardsAnimated = 0;
+            const totalCards = dealtCards.length;
+            
+            // Reverse order so most recently played is on top
+            const cardsToDiscard = [...dealtCards].reverse();
+
+            cardsToDiscard.forEach((dc, index) => {
+                const currentPos = {
+                    x: dc.body.position.x,
+                    y: dc.body.position.y,
+                    z: dc.body.position.z
+                };
+                
+                // Step 1: Position in front of discard tray
+                const frontOfTrayZ = discardPos.z + (SHOE_DEPTH / 2) + CARD.length * 0.6;
+                const frontPosition = {
+                    x: discardPos.x,
+                    y: CARD.thickness/2 + 0.0015, // Keep at table level
+                    z: frontOfTrayZ
+                };
+                
+                // Step 2: Stack height based on current discard pile + this card's position
+                const stackIndex = discardedCards.length + index;
+                const finalY = trayBottomTopY + (stackIndex * CARD.thickness);
+                const finalPosition = {
+                    x: targetX,
+                    y: finalY,
+                    z: targetZ
+                };
+                
+                const delay = index * 120; // Stagger animations (increased for two-step animation)
+                
+                setTimeout(() => {
+                    // First animation: slide to front of tray with flip (500ms)
+                    const slideToFrontDuration = 500;
+                    const startTime = performance.now();
+                    
+                    activeTweens.push({
+                        discard: true,
+                        sc: dc,
+                        fromPos: currentPos,
+                        toPos: frontPosition,
+                        duration: slideToFrontDuration,
+                        start: startTime,
+                        onComplete: () => {
+                            // Second animation: slide into tray and stack (300ms)
+                            const slideInDuration = 300;
+                            const slideInStart = performance.now();
+                            
+                            activeTweens.push({
+                                slideIn: true, // New type for sliding into tray (no flip)
+                                sc: dc,
+                                fromPos: frontPosition,
+                                toPos: finalPosition,
+                                duration: slideInDuration,
+                                start: slideInStart,
+                                onComplete: () => {
+                                    cardsAnimated++;
+                                    
+                                    // Mark card state for discard pile
+                                    dc.isFaceDown = true;
+                                    dc.isDealt = false; // Allow rotation sync again
+                                    
+                                    // Move to discarded array
+                                    discardedCards.push(dc);
+                                    
+                                    if (cardsAnimated === totalCards) {
+                                        // All cards discarded, clear dealt cards array
+                                        dealtCards = [];
+                                        cardMeshes = [];
+                                        if (callback) callback();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }, delay);
+            });
+        }
+
+        function dealCard(hand, isDealer, cardIndex, isFaceDown, callback) {
+            // Check if we've reached the red cut card
+            if (shoeCards.length > 0 && shoeCards[shoeCards.length - 1].isRedCard) {
+                updateStatus('Cut card reached! Reshuffling after this hand...');
+                // We'll trigger reshuffle after the hand completes
+            }
+            
+            // Pull card from the top of the shoe (end of array)
+            if (shoeCards.length === 0) {
+                updateStatus('Shoe is empty! Reinitializing...');
+                initializeShoe();
+                shuffleShoe();
+                if (callback) callback();
+                return null;
+            }
+            
+            const shoeCard = shoeCards.pop();
+            // Ensure the card has its face material ready (in case it was deferred in the shoe)
+            // Use 2k for dealt cards for maximum oblique-angle clarity
+            ensureCardFaceMaterial(shoeCard, '2k');
+            
+            // Skip the red cut card
+            if (shoeCard.isRedCard) {
+                // Red card reached - mark for reshuffle
+                needsReshuffle = true;
+                updateStatus('Cut card reached! Will reshuffle before next hand.');
+                scene.remove(shoeCard.mesh);
+                world.removeBody(shoeCard.body);
+                
+                // Try to get the next card
+                if (shoeCards.length === 0) {
+                    updateStatus('Reshuffling...');
+                    setTimeout(() => {
+                        initializeShoe();
+                        shuffleShoe();
+                        needsReshuffle = false;
+                    }, 2000);
+                    if (callback) callback();
+                    return null;
+                }
+                return dealCard(hand, isDealer, cardIndex, isFaceDown, callback); // Recursive call to get next card
+            }
+            
+            hand.push(shoeCard.card);
+            
+            // Move card from shoe to dealt cards array
+            dealtCards.push(shoeCard);
+            
+            // Mark if this is the dealer's hole card (face down)
+            if (isFaceDown) {
+                shoeCard.isFaceDown = true;
+                shoeCard.isHoleCard = true;
+            }
+            
+            // Center the cards on the table (adjust X to be more centered)
+            const xOffset = isDealer ? -0.5 : -0.5; // More centered X position
+            const zOffset = isDealer ? -1.5 : 1.5; // Closer to center Z position
+            const spacing = CARD_SPACING;
+            
+            const shoePos = shoeGroup.position;
+            
+            // Step 1: Slide card out to front of shoe
+            const frontOfShoeZ = shoePos.z + (SHOE_DEPTH / 2) + CARD.length * 0.6;
+            const slideOutPosition = {
+                x: shoePos.x,
+                y: shoeCard.body.position.y,
+                z: frontOfShoeZ
+            };
+            
+            // Step 2: Final position on table
+            const finalPosition = {
+                x: xOffset + (cardIndex * spacing),
+                y: CARD.thickness/2 + 0.0015,
+                z: zOffset
+            };
+            
+            // Make card kinematic (mass = 0) so animation controls it
+            shoeCard.body.mass = 0;
+            shoeCard.body.updateMassProperties();
+            
+            // First animation: slide out from shoe (200ms)
+            const slideOutDuration = 200;
+            addSlideTween(
+                shoeCard,
+                shoeCard.body.position.x,
+                shoeCard.body.position.z,
+                slideOutPosition.x,
+                slideOutPosition.z,
+                slideOutPosition.y,
+                slideOutDuration
+            );
+            
+            // Second animation: deal to table with flip (starts after slide out)
+            setTimeout(() => {
+                addCardDealTween(shoeCard, slideOutPosition, finalPosition, 600, 300, isFaceDown);
+            }, slideOutDuration + 50);
+            
+            // Store the card mesh for tracking
+            cardMeshes.push(shoeCard.mesh);
+            
+            // Call callback after both animations complete
+            if (callback) {
+                setTimeout(callback, slideOutDuration + 850);
+            }
+            
+            return shoeCard.card;
+        }
+
+        function updateScores() {
+            const playerValue = calculateHandValue(playerHand);
+            
+            // Check if dealer has a face-down hole card
+            const hasHoleCard = dealtCards.some(dc => dc.isHoleCard && dc.isFaceDown);
+            
+            if (hasHoleCard && dealerHand.length >= 1) {
+                // Only show the value of the first (visible) card
+                const visibleCardValue = getCardValue(dealerHand[0]);
+                document.getElementById('dealerScore').textContent = visibleCardValue;
+            } else {
+                // Show full dealer hand value
+                const dealerValue = calculateHandValue(dealerHand);
+                document.getElementById('dealerScore').textContent = dealerValue;
+            }
+            
+            document.getElementById('playerScore').textContent = playerValue;
+        }
+
+        function updateStatus(message) {
+            document.getElementById('gameStatus').textContent = message;
+        }
+
+        // --- Hand History ---
+        function isBlackjack(hand) {
+            return hand.length === 2 && calculateHandValue(hand) === 21;
+        }
+        function isSoftHand(hand) {
+            // Determine if any ace is counted as 11 (soft)
+            let rawTotal = 0; let aces = 0;
+            for (const c of hand) { rawTotal += getCardValue(c); if (c.rank === 'A') aces++; }
+            while (rawTotal > 21 && aces > 0) { rawTotal -= 10; aces--; }
+            return aces > 0; // any remaining ace counted as 11 => soft
+        }
+        function addHandHistoryEntry(resultKey) {
+            const playerValue = calculateHandValue(playerHand);
+            const dealerValue = calculateHandValue(dealerHand);
+            const entry = {
+                timestamp: Date.now(),
+                result: resultKey,
+                playerValue,
+                dealerValue,
+                playerBJ: isBlackjack(playerHand),
+                dealerBJ: isBlackjack(dealerHand)
+            };
+            handHistory.unshift(entry);
+            if (handHistory.length > MAX_HISTORY) handHistory.pop();
+            updateHandHistoryUI();
+        }
+        function formatResultLabel(entry) {
+            switch (entry.result) {
+                case 'blackjack-player': return 'Player Blackjack';
+                case 'blackjack-dealer': return 'Dealer Blackjack';
+                case 'blackjack-push': return 'Push (Blackjack)';
+                case 'player': return 'Win';
+                case 'dealer': return 'Loss';
+                case 'push': return 'Push';
+                default: return entry.result;
+            }
+        }
+        function updateHandHistoryUI() {
+            const container = document.getElementById('handHistoryEntries');
+            if (!container) return;
+            container.innerHTML = handHistory.map(e => {
+                const clsBase = e.result.includes('blackjack') ? 'entry blackjack' : 'entry';
+                const cls = clsBase + ' ' + (e.result.startsWith('player') || e.result === 'blackjack-player' ? 'win' : (e.result.startsWith('dealer') || e.result === 'blackjack-dealer' ? 'loss' : (e.result.includes('push') ? 'push' : '')));
+                const timeStr = new Date(e.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                return `<div class="${cls}"><span class="label">${formatResultLabel(e)}</span> ${e.playerBJ?'★':''} P:${e.playerValue} / D:${e.dealerValue} ${e.dealerBJ?'★':''}<br><span style="font-size:11px;opacity:.7">${timeStr}</span></div>`;
+            }).join('');
+        }
+
+        // --- Chip Win/Loss Handling ---
+        function getBetChips() {
+            // Get all chips in the bet zone (Rapier only)
+            const betChips = [];
+            if (rapierChips && rapierChips.length) {
+                for (let chip of rapierChips) {
+                    const t = chip.rb.translation();
+                    const dx = t.x - BET_ZONE.center.x;
+                    const dz = t.z - BET_ZONE.center.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    if (distance <= BET_ZONE.radius) {
+                        betChips.push({ chip, type: 'rapier' });
+                    }
+                }
+            }
+            return betChips;
+        }
+
+        function collectLostChips() {
+            const betChips = getBetChips();
+            
+            // Animate chips sliding off table (toward dealer/bank)
+            betChips.forEach(({ chip }, index) => {
+                setTimeout(() => {
+                    // Rapier chip: apply impulse toward bank
+                    const t = chip.rb.translation();
+                    const dx = -t.x * 0.5;
+                    const dz = -6 - t.z;
+                    const len = Math.sqrt(dx*dx + dz*dz) || 1;
+                    chip.rb.applyImpulse({ x: dx/len * 0.003, y: 0.002, z: dz/len * 0.003 }, true);
+                    chip.rb.wakeUp();
+                    
+                    // Remove chip after it falls off table
+                    setTimeout(() => {
+                        scene.remove(chip.mesh);
+                        if (chip.rb && rapierWorld) {
+                            rapierWorld.removeRigidBody(chip.rb);
+                        }
+                        const chipIndex = rapierChips.indexOf(chip);
+                        if (chipIndex > -1) {
+                            rapierChips.splice(chipIndex, 1);
+                        }
+                    }, 2000);
+                }, index * 50); // Stagger the collection
+            });
+        }
+
+        function payoutWinningChips(isBlackjack = false) {
+            const betAmount = calculateBetAmount();
+            const payoutAmount = isBlackjack ? Math.floor(betAmount * 1.5) : betAmount;
+            
+            // Move bet chips to stockpile (keep original bet)
+            const betChips = getBetChips();
+            betChips.forEach(({ chip }, index) => {
+                setTimeout(() => {
+                    const targetX = STOCKPILE_ZONE.center.x + (Math.random() - 0.5) * 0.5;
+                    const targetZ = STOCKPILE_ZONE.center.z + (Math.random() - 0.5) * 0.5;
+                    
+                    const t = chip.rb.translation();
+                    const dx = targetX - t.x;
+                    const dz = targetZ - t.z;
+                    const len = Math.sqrt(dx*dx + dz*dz) || 1;
+                    chip.rb.applyImpulse({ x: dx/len * 0.002, y: 0.001, z: dz/len * 0.002 }, true);
+                    chip.rb.wakeUp();
+                }, index * 50);
+            });
+            
+            // Spawn winning chips from bank
+            setTimeout(() => {
+                spawnChipsFromBank(payoutAmount);
+            }, betChips.length * 50 + 300);
+        }
+
+        function spawnChipsFromBank(amount) {
+            // Break down amount into chip denominations (greedy algorithm)
+            const denominations = [500, 100, 25, 5, 1];
+            let remaining = amount;
+            const chipsToSpawn = [];
+            
+            for (let denom of denominations) {
+                while (remaining >= denom) {
+                    chipsToSpawn.push(denom);
+                    remaining -= denom;
+                }
+            }
+            
+            // Spawn chips from bank area (dealer side) sliding to stockpile
+            chipsToSpawn.forEach((value, index) => {
+                setTimeout(() => {
+                    const bankX = -2 + (Math.random() - 0.5) * 1;
+                    const bankZ = -3;
+                    const bankY = (rapierReady ? FELT_TOP_Y_RAPIER : FELT_TOP_Y) + CHIP.thickness / 2 + 0.5;
+                    
+                    const chip = createRapierValueChip(value, {
+                        x: bankX,
+                        y: bankY,
+                        z: bankZ
+                    });
+                    
+                    if (chip && chip.rb) {
+                        // Apply impulse toward stockpile
+                        const targetX = STOCKPILE_ZONE.center.x + (Math.random() - 0.5) * 0.8;
+                        const targetZ = STOCKPILE_ZONE.center.z + (Math.random() - 0.5) * 0.8;
+                        
+                        const dx = targetX - bankX;
+                        const dz = targetZ - bankZ;
+                        const len = Math.sqrt(dx*dx + dz*dz) || 1;
+                        chip.rb.applyImpulse({ x: dx/len * 0.003, y: 0.0005, z: dz/len * 0.003 }, true);
+                        chip.rb.wakeUp();
+                    }
+                }, index * 80);
+            });
+        }
+
+        function returnPushChips() {
+            // On push, just slide bet chips back to stockpile
+            const betChips = getBetChips();
+            betChips.forEach(({ chip }, index) => {
+                setTimeout(() => {
+                    const targetX = STOCKPILE_ZONE.center.x + (Math.random() - 0.5) * 0.5;
+                    const targetZ = STOCKPILE_ZONE.center.z + (Math.random() - 0.5) * 0.5;
+                    
+                    const t = chip.rb.translation();
+                    const dx = targetX - t.x;
+                    const dz = targetZ - t.z;
+                    const len = Math.sqrt(dx*dx + dz*dz) || 1;
+                    chip.rb.applyImpulse({ x: dx/len * 0.002, y: 0.001, z: dz/len * 0.002 }, true);
+                    chip.rb.wakeUp();
+                }, index * 50);
+            });
+        }
+
+        // --- Chip Glow / Pulse in Bet Zone ---
+        const CHIP_PULSE_STRENGTH = 0.06; // scale amplitude
+        const CHIP_PULSE_SPEED = 0.004; // ms multiplier
+        function initChipPulsePhases() {
+            rapierChips.forEach((chip, i) => { chip._pulsePhase = i * 0.9; });
+        }
+        function updateBetZoneChipEffects(timeNow) {
+            if (!rapierChips || rapierChips.length === 0) return;
+            const tFactor = timeNow * CHIP_PULSE_SPEED;
+            rapierChips.forEach(chip => {
+                const tr = chip.rb.translation();
+                const dx = tr.x - BET_ZONE.center.x;
+                const dz = tr.z - BET_ZONE.center.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                const inside = dist <= BET_ZONE.radius;
+                const mesh = chip.mesh.children.find(c => c.isMesh) || chip.mesh;
+                if (!mesh) return;
+                if (inside) {
+                    const pulse = Math.sin(tFactor + (chip._pulsePhase || 0)) * CHIP_PULSE_STRENGTH;
+                    const s = 1 + pulse;
+                    mesh.scale.set(s, s, s);
+                    // Emissive highlight
+                    if (Array.isArray(mesh.material)) {
+                        // top (index 1) & bottom (index 2) share glow
+                        [1,2].forEach(idx => {
+                            const m = mesh.material[idx];
+                            if (m && m.emissive) {
+                                m.emissive.setHex(0xffdd55);
+                                m.emissiveIntensity = 0.6 + pulse * 2.0;
+                            }
+                        });
+                    } else if (mesh.material && mesh.material.emissive) {
+                        mesh.material.emissive.setHex(0xffdd55);
+                        mesh.material.emissiveIntensity = 0.6 + pulse * 2.0;
+                    }
+                } else {
+                    mesh.scale.set(1,1,1);
+                    if (Array.isArray(mesh.material)) {
+                        [1,2].forEach(idx => {
+                            const m = mesh.material[idx];
+                            if (m && m.emissive) {
+                                m.emissive.setHex(0x000000);
+                                m.emissiveIntensity = 0.0;
+                            }
+                        });
+                    } else if (mesh.material && mesh.material.emissive) {
+                        mesh.material.emissive.setHex(0x000000);
+                        mesh.material.emissiveIntensity = 0.0;
+                    }
+                }
+            });
+        }
+
+        function checkWinner() {
+            const dealerValue = calculateHandValue(dealerHand);
+            const playerValue = calculateHandValue(playerHand);
+            
+            if (playerValue > 21) {
+                updateStatus('Bust! Dealer wins.');
+                return 'dealer';
+            } else if (dealerValue > 21) {
+                updateStatus('Dealer busts! You win!');
+                return 'player';
+            } else if (dealerValue > playerValue) {
+                updateStatus('Dealer wins.');
+                return 'dealer';
+            } else if (playerValue > dealerValue) {
+                updateStatus('You win!');
+                return 'player';
+            } else {
+                updateStatus('Push (tie).');
+                return 'push';
+            }
+        }
+
+        // --- Game Controls ---
+        const dealBtn = document.getElementById('dealBtn');
+        const hitBtn = document.getElementById('hitBtn');
+        const standBtn = document.getElementById('standBtn');
+
+        dealBtn.addEventListener('click', () => {
+            // If there are cards on the table, discard them first
+            if (dealtCards.length > 0) {
+                dealBtn.disabled = true;
+                updateStatus('Clearing table...');
+                discardCardsToTray(() => {
+                    // After cards are discarded, check for reshuffle or start new hand
+                    if (needsReshuffle) {
+                        updateStatus('Reshuffling shoe...');
+                        initializeShoe();
+                        shuffleShoe();
+                        needsReshuffle = false;
+                        // Poll until shuffle animation completes
+                        function waitForShuffleThenStart() {
+                            if (!isShuffling) {
+                                startNewHand();
+                            } else {
+                                setTimeout(waitForShuffleThenStart, 120);
+                            }
+                        }
+                        waitForShuffleThenStart();
+                    } else {
+                        startNewHand();
+                    }
+                });
+                return;
+            }
+            
+            // No cards on table, check if reshuffle is needed before starting new hand
+            if (needsReshuffle) {
+                updateStatus('Reshuffling shoe...');
+                initializeShoe();
+                shuffleShoe();
+                needsReshuffle = false;
+                // Poll until shuffle animation completes
+                function waitForShuffleThenStart() {
+                    if (!isShuffling) {
+                        startNewHand();
+                    } else {
+                        setTimeout(waitForShuffleThenStart, 120);
+                    }
+                }
+                waitForShuffleThenStart();
+                return;
+            }
+            startNewHand();
+        });
+        
+        function startNewHand() {
+            createDeck();
+            dealerHand = [];
+            playerHand = [];
+            clearCards();
+            updateStatus('Dealing...');
+            
+            // Sequential card dealing animation
+            // Order: Player card 1, Dealer card 1, Player card 2, Dealer card 2 (face down)
+            let dealSequence = [
+                { hand: playerHand, isDealer: false, handIndex: 0, faceDown: false },
+                { hand: dealerHand, isDealer: true, handIndex: 0, faceDown: false },
+                { hand: playerHand, isDealer: false, handIndex: 1, faceDown: false },
+                { hand: dealerHand, isDealer: true, handIndex: 1, faceDown: true } // Dealer's hole card
+            ];
+            
+            let currentDealIndex = 0;
+            
+            function dealNextCard() {
+                if (currentDealIndex >= dealSequence.length) {
+                    // All initial cards dealt
+                    updateScores();
+                    updateStatus('');
+                    gameInProgress = true;
+                    dealBtn.disabled = true;
+                    hitBtn.disabled = false;
+                    standBtn.disabled = false;
+                    evaluateInitialHands();
+                    return;
+                }
+                
+                const deal = dealSequence[currentDealIndex];
+                currentDealIndex++;
+                
+                // Deal card with callback to deal next card after animation
+                dealCard(deal.hand, deal.isDealer, deal.handIndex, deal.faceDown, () => {
+                    updateScores();
+                    dealNextCard();
+                });
+            }
+            
+            // Start the sequence
+            dealNextCard();
+        }
+
+        // Evaluate initial hands for early blackjack detection (dealer hole-card peek)
+        function evaluateInitialHands() {
+            const playerBJ = isBlackjack(playerHand);
+            const dealerBJ = isBlackjack(dealerHand);
+            if (!playerBJ && !dealerBJ) return; // no early resolution needed
+            // Reveal dealer hole card if hidden
+            const holeCard = dealtCards.find(dc => dc.isHoleCard && dc.isFaceDown);
+            if (holeCard) {
+                flipHoleCard(() => finalizeInitialBlackjack(playerBJ, dealerBJ));
+            } else {
+                finalizeInitialBlackjack(playerBJ, dealerBJ);
+            }
+        }
+        function finalizeInitialBlackjack(playerBJ, dealerBJ) {
+            updateScores();
+            if (playerBJ && dealerBJ) {
+                updateStatus('Both Blackjack - Push');
+                lastResult = 'blackjack-push';
+                handleGameResult('push');
+                endGame();
+            } else if (dealerBJ) {
+                updateStatus('Dealer Blackjack');
+                lastResult = 'blackjack-dealer';
+                handleGameResult('dealer');
+                endGame();
+            } else if (playerBJ) {
+                updateStatus('Blackjack!');
+                lastResult = 'blackjack-player';
+                handleGameResult('player');
+                endGame();
+            }
+        }
+
+        hitBtn.addEventListener('click', () => {
+            hitBtn.disabled = true; // Disable during animation
+            dealCard(playerHand, false, playerHand.length, false, () => {
+                updateScores();
+                
+                if (calculateHandValue(playerHand) > 21) {
+                    updateStatus('Bust! Dealer wins.');
+                    collectLostChips();
+                    endGame();
+                } else {
+                    hitBtn.disabled = false; // Re-enable if still playing
+                }
+            });
+        });
+
+        // Flip the dealer's hole card
+        function flipHoleCard(callback) {
+            // Find the dealer's hole card (second card, face down)
+            const holeCard = dealtCards.find(dc => dc.isHoleCard && dc.isFaceDown);
+            
+            if (!holeCard) {
+                if (callback) callback();
+                return;
+            }
+            
+            // Animate the flip
+            const duration = 400;
+            const startTime = performance.now();
+            
+            activeTweens.push({
+                flip: true,
+                sc: holeCard,
+                duration: duration,
+                start: startTime,
+                fromRotation: Math.PI,
+                toRotation: 0,
+                originalY: holeCard.body.position.y // Store original Y position
+            });
+            
+            // Mark as no longer face down
+            holeCard.isFaceDown = false;
+            
+            // Call callback after flip completes
+            if (callback) {
+                setTimeout(callback, duration + 50);
+            }
+        }
+
+        function stand() {
+            hitBtn.disabled = true;
+            standBtn.disabled = true;
+            
+            // First, flip the dealer's hole card
+            updateStatus('Dealer reveals...');
+            flipHoleCard(() => {
+                updateScores();
+                
+                // Then dealer draws until 17 or higher (sequential animation)
+                function dealerDrawSequence() {
+                    if (calculateHandValue(dealerHand) < 17) {
+                        dealCard(dealerHand, true, dealerHand.length, false, () => {
+                            updateScores();
+                            dealerDrawSequence(); // Continue drawing if needed
+                        });
+                    } else {
+                        // Dealer done drawing
+                        setTimeout(() => {
+                            const result = checkWinner();
+                            handleGameResult(result);
+                            endGame();
+                        }, 500);
+                    }
+                }
+                
+                dealerDrawSequence();
+            });
+        }
+
+        standBtn.addEventListener('click', stand);
+
+        function handleGameResult(result) {
+            if (result === 'dealer') {
+                collectLostChips();
+            } else if (result === 'player') {
+                // Check if it was blackjack (2 cards totaling 21)
+                const isBlackjack = playerHand.length === 2 && calculateHandValue(playerHand) === 21;
+                payoutWinningChips(isBlackjack);
+            } else if (result === 'push') {
+                returnPushChips();
+            }
+            // Store lastResult if not already set by early blackjack evaluation
+            if (!lastResult) {
+                lastResult = result;
+            }
+        }
+
+        function endGame() {
+            gameInProgress = false;
+            hitBtn.disabled = true;
+            standBtn.disabled = true;
+            dealBtn.disabled = false; // Re-enable deal button for next hand
+            if (lastResult) {
+                addHandHistoryEntry(lastResult);
+                lastResult = null; // reset for next hand
+            }
+        }
+
+        // --- GUI ---
+        const gui = new GUI();
+        
+        // Cards settings GUI
+        const cardsSettings = {
+            anisotropy: CARD_TEXTURE_ANISO,
+            anisoBoost: 1.0,
+        };
+        function applyCardTextureAnisotropy(val) {
+            CARD_TEXTURE_ANISO = Math.max(1, Math.min(MAX_ANISO, Math.round(val)));
+            // Update back texture if present
+            if (cardBackTexture) {
+                cardBackTexture.anisotropy = CARD_TEXTURE_ANISO;
+                cardBackTexture.needsUpdate = true;
+            }
+            // Update all cached face textures
+            if (faceTextureCache) {
+                faceTextureCache.forEach(tex => {
+                    tex.anisotropy = CARD_TEXTURE_ANISO;
+                    tex.needsUpdate = true;
+                });
+            }
+        }
+        const cardsFolder = gui.addFolder('Cards');
+        cardsFolder.add(cardsSettings, 'anisotropy', 1, MAX_ANISO, 1).name('Anisotropy').onChange(applyCardTextureAnisotropy);
+        cardsFolder.add(cardsSettings, 'anisoBoost', 0.0, 3.0, 0.05).name('Aniso Boost (shader)').onChange((v)=>{
+            setAnisoBoost(v);
+        });
+        
+        const cameraFolder = gui.addFolder('Camera');
+        cameraFolder.add(camera.position, 'x', -20, 20, 0.1).name('Camera X');
+        cameraFolder.add(camera.position, 'y', 2, 20, 0.1).name('Camera Y');
+        cameraFolder.add(camera.position, 'z', -20, 20, 0.1).name('Camera Z');
+        
+        const debugFolder = gui.addFolder('Debug');
+        // Rapier wireframes toggle
+        debugFolder.add(debugState, 'showRapierWireframes').name('Rapier Wireframes').onChange((v) => {
+            // Table + felt + room
+            rapierTableWireframes.forEach(wf => wf.visible = v);
+            if (typeof rapierRoomWireframes !== 'undefined') rapierRoomWireframes.forEach(wf => wf.visible = v);
+            // Chips
+            rapierChips.forEach(chip => { if (chip.wireframe) chip.wireframe.visible = v; });
+        });
+        // Cannon wireframes toggle
+        debugFolder.add(debugState, 'showCannonWireframes').name('Cannon Wireframes').onChange((v) => {
+            cannonWireframes.forEach(({ wireframe }) => wireframe.visible = v);
+        });
+        // Visual wireframe mode: make all standard meshes wireframe & semi-transparent
+        const originalVisualMaterialProps = new Map(); // mesh.uuid -> [ { material, wireframe, transparent, opacity, depthWrite } ]
+        function setVisualWireframeMode(on) {
+            scene.traverse(obj => {
+                if (!obj.isMesh) return;
+                // Skip existing debug wireframe helpers (LineSegments) and physics wireframe groups
+                if (obj.type === 'LineSegments') return;
+                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                if (on) {
+                    if (!originalVisualMaterialProps.has(obj.uuid)) {
+                        const stored = mats.map(m => ({ material: m, wireframe: m.wireframe, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite }));
+                        originalVisualMaterialProps.set(obj.uuid, stored);
+                    }
+                    mats.forEach(m => {
+                        m.wireframe = true;
+                        m.transparent = true;
+                        m.opacity = 0.18;
+                        m.depthWrite = false;
+                        m.needsUpdate = true;
+                    });
+                } else {
+                    const stored = originalVisualMaterialProps.get(obj.uuid);
+                    if (stored) {
+                        stored.forEach(s => {
+                            s.material.wireframe = s.wireframe;
+                            s.material.transparent = s.transparent;
+                            s.material.opacity = s.opacity;
+                            s.material.depthWrite = s.depthWrite;
+                            s.material.needsUpdate = true;
+                        });
+                    }
+                }
+            });
+            if (!on) {
+                // Optionally clear map to allow GC (keep if we want fast re-toggle retaining originals)
+                // originalVisualMaterialProps.clear();
+            }
+        }
+        debugFolder.add(debugState, 'showVisualWireframes').name('Visual Wireframe Mode').onChange((v) => {
+            setVisualWireframeMode(v);
+        });
+
+        // Room and lighting controls
+        const roomSettings = {
+            showDebug: false,
+            ambientIntensity: ambientLight.intensity,
+            ceilingLightIntensity: mainCeilingLight.intensity,
+            bulbGlow: lightBulb.material.emissiveIntensity
+        };
+        const roomFolder = gui.addFolder('Room');
+        roomFolder.add(roomSettings, 'showDebug').name('Show Debug Grid/Axes').onChange((v)=>{
+            axes.visible = v;
+            grid.visible = v;
+        });
+        roomFolder.add(roomSettings, 'ambientIntensity', 0, 2, 0.01).name('Ambient Intensity').onChange((v)=>{
+            ambientLight.intensity = v;
+        });
+        roomFolder.add(roomSettings, 'ceilingLightIntensity', 0, 15, 0.1).name('Ceiling Light Intensity').onChange((v)=>{
+            mainCeilingLight.intensity = v;
+        });
+        roomFolder.add(roomSettings, 'bulbGlow', 0, 8, 0.1).name('Bulb Glow').onChange((v)=>{
+            lightBulb.material.emissiveIntensity = v;
+        });
+
+        // --- Bet Zone Visualization ---
+        const betZoneGeometry = new THREE.CircleGeometry(BET_ZONE.radius, 64);
+        const betZoneMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffcc00,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.DoubleSide,
+            roughness: 0.9,
+            metalness: 0.0
+        });
+        const betZoneMesh = new THREE.Mesh(betZoneGeometry, betZoneMaterial);
+        betZoneMesh.rotation.x = -Math.PI / 2;
+        betZoneMesh.position.set(BET_ZONE.center.x, BET_ZONE.y, BET_ZONE.center.z);
+        betZoneMesh.receiveShadow = true;
+        scene.add(betZoneMesh);
+
+        // Add bet zone circle outline
+        const betZoneOutlineGeometry = new THREE.RingGeometry(BET_ZONE.radius - 0.02, BET_ZONE.radius, 64);
+        const betZoneOutlineMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide,
+            roughness: 0.9,
+            metalness: 0.0
+        });
+        const betZoneOutline = new THREE.Mesh(betZoneOutlineGeometry, betZoneOutlineMaterial);
+        betZoneOutline.rotation.x = -Math.PI / 2;
+        betZoneOutline.position.set(BET_ZONE.center.x, BET_ZONE.y + 0.0001, BET_ZONE.center.z);
+        betZoneOutline.receiveShadow = true;
+        scene.add(betZoneOutline);
+
+        // Add "BLACKJACK PAYS 3 TO 2" text on felt (near dealer)
+        function createFeltText(text, position, size = 0.25) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#0a5f1e'; // Match felt color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${size * 300}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshStandardMaterial({
+                map: texture,
+                transparent: true,
+                roughness: 0.9,
+                metalness: 0.0
+            });
+            
+            const geometry = new THREE.PlaneGeometry(3, 0.75);
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.set(position.x, position.y, position.z);
+            mesh.receiveShadow = true;
+            
+            return mesh;
+        }
+        
+        const blackjackPayText = createFeltText('BLACKJACK PAYS 3 TO 2', { x: 0, y: 0.002, z: -1.5 });
+        scene.add(blackjackPayText);
+
+        // --- Chip Interaction Handlers ---
+        function updateMousePosition(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        }
+
+        function getChipUnderMouse() {
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Test against Rapier chip meshes (may be Group or Mesh)
+            const rapierChipMeshes = rapierChips.map(c => {
+                if (c.mesh.children && c.mesh.children.length > 0) {
+                    // Find first non-wireframe child
+                    for (let child of c.mesh.children) {
+                        if (child.type === 'Mesh') return child;
+                    }
+                }
+                return c.mesh;
+            });
+            
+            const intersects = raycaster.intersectObjects(rapierChipMeshes, false);
+            
+            if (intersects.length > 0) {
+                const hitObject = intersects[0].object;
+                
+                // Check Rapier chips
+                for (let chip of rapierChips) {
+                    if (chip.mesh === hitObject || chip.mesh.children.includes(hitObject)) {
+                        return { chip, type: 'rapier' };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function updateDraggedChipPosition() {
+            if (!draggedChip) return;
+            raycaster.setFromCamera(mouse, camera);
+            if (raycaster.ray.intersectPlane(dragPlane, _dragPlaneIntersect)) {
+                const { chip } = draggedChip;
+                const targetY = DRAG_PLANE_Y + CHIP.thickness / 2 + 0.002;
+                let yNow = targetY;
+                if (chip.dragAnim) {
+                    const now = performance.now();
+                    const d = chip.dragAnim.duration || DRAG_RISE_DURATION_MS;
+                    const t = (now - chip.dragAnim.startTime) / Math.max(1, d);
+                    const k = easeOutCubic(t);
+                    yNow = chip.dragAnim.startY + (targetY - chip.dragAnim.startY) * k;
+                    if (t >= 1) chip.dragAnim = null;
+                }
+                const newPos = _dragPlaneIntersect.clone().add(dragOffset);
+                newPos.y = yNow;
+                chip.rb.setNextKinematicTranslation({ x: newPos.x, y: newPos.y, z: newPos.z });
+                chip.mesh.position.set(newPos.x, newPos.y, newPos.z);
+            }
+        }
+
+        function onMouseDown(event) {
+            if (event.button !== 0) return; // Only left click
+            if (gameInProgress) return; // Can't move chips during game
+            
+            updateMousePosition(event);
+            const result = getChipUnderMouse();
+            
+            if (result) {
+                draggedChip = result;
+                const { chip } = result;
+                chip.isDragging = true;
+                
+                // Make Rapier chip kinematic while dragging
+                chip.rb.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+                chip.rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                chip.rb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                
+                // Start rise animation from current height
+                chip.dragAnim = { startTime: performance.now(), startY: chip.mesh.position.y, duration: DRAG_RISE_DURATION_MS };
+                
+                // Calculate drag offset and immediately position once so pickup is instant
+                raycaster.setFromCamera(mouse, camera);
+                if (raycaster.ray.intersectPlane(dragPlane, _dragPlaneIntersect)) {
+                    dragOffset.copy(chip.mesh.position).sub(_dragPlaneIntersect);
+                    // Trigger an initial update so it starts rising on click
+                    updateDraggedChipPosition();
+                }
+                
+                controls.enabled = false; // Disable camera controls while dragging
+            }
+        }
+
+        function onMouseMove(event) {
+            updateMousePosition(event);
+            
+            if (draggedChip) {
+                updateDraggedChipPosition();
+            }
+        }
+
+        function onMouseUp(event) {
+            if (draggedChip) {
+                const { chip } = draggedChip;
+                
+                // Restore dynamic physics for Rapier chip
+                chip.rb.setBodyType(RAPIER.RigidBodyType.Dynamic);
+                chip.rb.wakeUp();
+                
+                // Clear any active drag animation state
+                chip.dragAnim = null;
+                
+                chip.isDragging = false;
+                draggedChip = null;
+                
+                controls.enabled = true;
+            }
+        }
+
+        // Add event listeners
+        renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+        renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+        renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+        renderer.domElement.addEventListener('mouseleave', onMouseUp, false);
+
+        // Expose a simple API to adjust drag plane height at runtime
+            function setDragPlaneHeight(y) {
+            DRAG_PLANE_Y = y;
+            // For plane (n dot p + c = 0) with n=(0,1,0), y = -c
+            dragPlane.constant = -DRAG_PLANE_Y;
+        }
+        window.setDragPlaneHeight = setDragPlaneHeight;
+            // Expose API to adjust rise duration (ms)
+            function setDragRiseDuration(ms){ DRAG_RISE_DURATION_MS = Math.max(0, ms|0); }
+            window.setDragRiseDuration = setDragRiseDuration;
+
+        // Calculate total bet in the bet zone
+        function calculateBetAmount() {
+            let total = 0;
+            // Include Rapier chips with value
+            if (rapierChips && rapierChips.length) {
+                for (let rc of rapierChips) {
+                    if (rc.value == null) continue; // skip debug chips
+                    const t = rc.rb.translation();
+                    const dx = t.x - BET_ZONE.center.x;
+                    const dz = t.z - BET_ZONE.center.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    if (distance <= BET_ZONE.radius) total += rc.value;
+                }
+            }
+            return total;
+        }
+
+        // Initialize starting chips in stockpile
+        function initializeChipStockpile() {
+            // Debug spawn: one chip of each type, centered on table, faces up
+            const demoValues = [1, 5, 25, 100, 500];
+            const spacing = 0.25; // slight offset so they don't overlap
+            const baseX = -spacing * ((demoValues.length - 1) / 2);
+            const centerZ = 0; // center of table
+            const centerY = FELT_TOP_Y + (CHIP.thickness / 2) + 0.001; // epsilon above felt (y=0)
+
+            console.log('[Chip Init] Creating', demoValues.length, 'value chips');
+            for (let i = 0; i < demoValues.length; i++) {
+                const x = baseX + i * spacing;
+                const chip = createRapierValueChip(demoValues[i], {
+                    x,
+                    y: (typeof FELT_TOP_Y_RAPIER === 'number' ? FELT_TOP_Y_RAPIER : 0) + (CHIP.thickness / 2) + 0.001,
+                    z: centerZ
+                });
+                console.log('[Chip Init] Created chip', i+1, 'value:', demoValues[i], 'at x:', x.toFixed(3));
+            }
+            console.log('[Chip Init] Total rapierChips:', rapierChips.length);
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const timeNow = performance.now();
+            
+            // Update physics
+            world.step(1/60);
+            if (rapierReady) {
+                rapierWorld.step();
+            }
+            
+            // Update camera animation
+            updateCameraAnimation(timeNow);
+            
+            // Update shuffle tweens (kinematic motion)
+            updateShuffleTweens(timeNow);
+            
+            // Sync card meshes with physics bodies for cards in shoe
+            for (let sc of shoeCards) {
+                sc.mesh.position.copy(sc.body.position);
+                sc.mesh.quaternion.copy(sc.body.quaternion);
+            }
+            
+            // Sync dealt cards with their physics bodies
+            for (let dc of dealtCards) {
+                dc.mesh.position.copy(dc.body.position);
+                // Only sync rotation if card hasn't been dealt (is still animating or in shoe)
+                if (!dc.isDealt) {
+                    dc.mesh.quaternion.copy(dc.body.quaternion);
+                }
+            }
+            
+            // Sync discarded cards with their physics bodies
+            for (let dc of discardedCards) {
+                dc.mesh.position.copy(dc.body.position);
+                dc.mesh.quaternion.copy(dc.body.quaternion);
+            }
+            
+            // Sync Rapier chips
+            if (rapierReady && rapierChips.length) {
+                const EPS = 0.0001;
+                for (const chip of rapierChips) {
+                    if (!chip.isDragging) {
+                        const t = chip.rb.translation();
+                        const r = chip.rb.rotation();
+                        // Allow chips to fall off table: remove clamp that forced them to stay on felt.
+                        // We only sync visual mesh to current rigid body translation.
+                        chip.mesh.position.set(t.x, t.y, t.z);
+                        chip.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+                    }
+                }
+            }
+
+            // Chip glow/pulse effect
+            updateBetZoneChipEffects(timeNow);
+            
+            // Update deal button state based on bet amount
+            if (!gameInProgress && !isShuffling) {
+                const betAmount = calculateBetAmount();
+                dealBtn.disabled = betAmount === 0;
+                document.getElementById('currentBet').textContent = '$' + betAmount;
+            }
+            
+            // Sync physics wireframes
+            if (debugState.showCannonWireframes) {
+                cannonWireframes.forEach(({ wireframe, body }) => {
+                    wireframe.position.copy(body.position);
+                    wireframe.quaternion.copy(body.quaternion);
+                });
+                
+                // Update debug spheres showing center of mass
+                if (window.debugSpheres) {
+                    window.debugSpheres.forEach(({ sphere, body }) => {
+                        sphere.position.copy(body.position);
+                    });
+                }
+            }
+
+            // While dragging, continuously update chip position so pickup works on click
+            if (draggedChip) {
+                updateDraggedChipPosition();
+            }
+            
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- Resize Handler ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start rendering first to avoid a blank screen, then init shoe and shuffle
+        animate();
+        // Defer heavy initialization slightly so the first frame paints
+        setTimeout(() => {
+            initializeShoe();
+            initializeChipStockpile();
+            // Give a bit more time so the shoe appears before we start shuffling
+            setTimeout(() => {
+                shuffleShoe(true);
+            }, st(600));
+            // Initialize chip pulse phases after initial stockpile spawn
+            initChipPulsePhases();
+        }, 0);
+
+        // Dev: expose a quick Rapier chip spawn for testing
+        window.spawnRapierChip = (x=0, y=null, z=0) => {
+            const yy = y == null ? (rapierReady ? FELT_TOP_Y_RAPIER + 0.5 : 0.5) : y;
+            return spawnRapierChip(x, yy, z);
+        };
+    </script>
+</body>
+</html>

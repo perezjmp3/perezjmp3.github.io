@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Debug Environment</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        #c {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            max-width: 300px;
+            z-index: 100;
+        }
+        #controls h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        #controls label {
+            display: block;
+            margin: 8px 0;
+            cursor: pointer;
+        }
+        #controls input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        #controls button {
+            margin-top: 12px;
+            padding: 8px 16px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        #controls button:hover {
+            background: #0052a3;
+        }
+        #info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="c"></canvas>
+    </div>
+
+    <div id="controls">
+        <h3>Debug Controls</h3>
+        <label>
+            <input type="checkbox" id="showGrid" checked>
+            Show Grid
+        </label>
+        <label>
+            <input type="checkbox" id="showAxes" checked>
+            Show Axes
+        </label>
+        <label>
+            <input type="checkbox" id="showRapierWireframes">
+            Rapier Wireframes
+        </label>
+        <label>
+            <input type="checkbox" id="showCannonWireframes">
+            Cannon Wireframes
+        </label>
+        <label>
+            <input type="checkbox" id="showVisualWireframes">
+            Visual Wireframe Mode
+        </label>
+        <label>
+            <input type="checkbox" id="showTableWireframe">
+            Table Wireframe
+        </label>
+        <button id="resetCamera">Reset Camera</button>
+        <button id="spawnChip">Spawn Chip</button>
+    </div>
+
+    <div id="info">
+        FPS: <span id="fps">0</span> | Physics Bodies: <span id="bodyCount">0</span>
+    </div>
+
+    <script type="module">
+        // Import cannon-es as ES module from CDN
+        import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm';
+        // Make it globally available
+        window.CANNON = CANNON;
+    </script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./lib/three/three.module.js",
+            "three/addons/": "./lib/three/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/OrbitControls.js';
+        
+        // Access CANNON from global scope
+        const CANNON = window.CANNON;
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(10, 8, 10);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: document.getElementById('c'),
+            antialias: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 2;
+        controls.maxDistance = 50;
+        controls.maxPolarAngle = Math.PI / 2.1;
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 50;
+        directionalLight.shadow.camera.left = -15;
+        directionalLight.shadow.camera.right = 15;
+        directionalLight.shadow.camera.top = 15;
+        directionalLight.shadow.camera.bottom = -15;
+        scene.add(directionalLight);
+
+        // --- Debug Helpers ---
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
+
+        const gridHelper = new THREE.GridHelper(30, 30, 0x00aaff, 0x334455);
+        gridHelper.material.opacity = 0.5;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        // --- Physics World ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+        world.broadphase = new CANNON.SAPBroadphase(world);
+        world.solver.iterations = 30; // Increased from 20 for better collision resolution
+        world.solver.tolerance = 0.0001;
+        world.allowSleep = true;
+        
+        // Increase contact equation stiffness for firmer contacts
+        world.defaultContactMaterial.contactEquationStiffness = 1e8;
+        world.defaultContactMaterial.contactEquationRelaxation = 3;
+
+        // Physics materials
+        const groundMaterial = new CANNON.Material('ground');
+        const defaultMaterial = new CANNON.Material('default');
+
+        const groundContact = new CANNON.ContactMaterial(groundMaterial, defaultMaterial, {
+            friction: 0.5,
+            restitution: 0.3,
+            contactEquationStiffness: 1e8,
+            contactEquationRelaxation: 3
+        });
+        world.addContactMaterial(groundContact);
+
+        // Ground physics body (plane)
+        const groundShape = new CANNON.Plane();
+        const groundBody = new CANNON.Body({
+            mass: 0,
+            material: groundMaterial
+        });
+        groundBody.addShape(groundShape);
+        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        world.addBody(groundBody);
+
+        // --- Complex Curved Table Shape (similar to blackjack table) ---
+        function createTableShape() {
+            const shape = new THREE.Shape();
+            
+            // Table dimensions
+            const tableWidth = 10.4;
+            const tableDepth = 6.5;
+            const curveRadius = 5.2;
+            
+            // Start at bottom-left corner (dealer side)
+            shape.moveTo(-tableWidth / 2, -tableDepth / 2);
+            
+            // Dealer side (straight)
+            shape.lineTo(tableWidth / 2, -tableDepth / 2);
+            
+            // Right side
+            shape.lineTo(tableWidth / 2, tableDepth / 2 - curveRadius);
+            
+            // Curved player side (using segments for smooth arc)
+            const numCurveSegments = 32;
+            for (let i = 0; i <= numCurveSegments; i++) {
+                const angle = (i / numCurveSegments) * Math.PI;
+                const x = Math.cos(angle) * curveRadius;
+                const z = Math.sin(angle) * curveRadius;
+                shape.lineTo(x, tableDepth / 2 - curveRadius + z);
+            }
+            
+            // Left side
+            shape.lineTo(-tableWidth / 2, tableDepth / 2 - curveRadius);
+            shape.lineTo(-tableWidth / 2, -tableDepth / 2);
+            
+            return shape;
+        }
+
+        const tableShape = createTableShape();
+        const extrudeSettings = {
+            depth: 0.13,
+            bevelEnabled: true,
+            bevelThickness: 0.026,
+            bevelSize: 0.026,
+            bevelSegments: 3
+        };
+
+        const tableGeometry = new THREE.ExtrudeGeometry(tableShape, extrudeSettings);
+        const tableMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a5f1e,
+            roughness: 0.8,
+            metalness: 0.0
+        });
+        const table = new THREE.Mesh(tableGeometry, tableMaterial);
+        table.rotation.x = -Math.PI / 2;
+        table.rotation.z = Math.PI;
+        // Compute bounding box to precisely align visual top to y=0 (bevel changes height)
+        tableGeometry.computeBoundingBox();
+        const bbox = tableGeometry.boundingBox;
+        const visualMaxY = bbox.max.y; // after rotation about X, extrusion depth maps to +Y
+        // Shift mesh down by its top extent so the highest vertex sits at y=0
+        table.position.y = -visualMaxY;
+        // Raise entire table above the floor so it sits clearly above y=0
+        const TABLE_Y_OFFSET = 0.0;
+        table.position.y += TABLE_Y_OFFSET;
+        console.log('[TableAlign] visualMaxY:', visualMaxY.toFixed(6), 'applied position.y =', table.position.y.toFixed(6));
+        table.receiveShadow = true;
+        table.castShadow = true;
+        scene.add(table);
+
+        // --- Table Physics: Trimesh (Most Accurate for Complex Shapes) ---
+        let FELT_TOP_Y = 0; // Will set to actual table top after transform
+        
+        // Create Trimesh from the actual Three.js table geometry
+        // Trimesh provides exact surface collision for complex shapes
+        table.updateMatrixWorld(true);
+        const tableGeomClone = table.geometry.clone();
+        tableGeomClone.applyMatrix4(table.matrixWorld);
+        // Log transformed min/max Y to verify alignment
+        tableGeomClone.computeBoundingBox();
+        const tbbox = tableGeomClone.boundingBox;
+        FELT_TOP_Y = tbbox.max.y;
+        console.log('[TableAlign] world-space Y range:', tbbox.min.y.toFixed(6), 'to', tbbox.max.y.toFixed(6), '=> FELT_TOP_Y =', FELT_TOP_Y.toFixed(6));
+        
+        const posAttr = tableGeomClone.getAttribute('position');
+        const indexAttr = tableGeomClone.index;
+        
+        // Extract vertices and indices
+        const vertices = [];
+        for (let i = 0; i < posAttr.count; i++) {
+            vertices.push(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+        }
+        
+        const indices = [];
+        if (indexAttr) {
+            for (let i = 0; i < indexAttr.count; i++) {
+                indices.push(indexAttr.getX(i));
+            }
+        } else {
+            for (let i = 0; i < posAttr.count; i++) {
+                indices.push(i);
+            }
+        }
+        
+        // Create Trimesh shape
+        const trimeshShape = new CANNON.Trimesh(vertices, indices);
+        const tablePhysicsBody = new CANNON.Body({ 
+            mass: 0, 
+            material: groundMaterial
+        });
+        tablePhysicsBody.addShape(trimeshShape);
+        tablePhysicsBody.userData = { type: 'trimeshTable', name: 'tableTop' };
+        world.addBody(tablePhysicsBody);
+        
+        console.log(`Created Trimesh table collider with ${vertices.length/3} vertices, ${indices.length/3} triangles`);
+
+        // --- RAPier Integration (chips + table collisions) ---
+        let RAPIER = null;
+        let rapierWorld = null;
+        let rapierReady = false;
+        const rapierChips = [];
+        const queuedChipSpawns = [];
+
+        async function initRapier() {
+            if (rapierReady) return;
+            const primary = 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.13.1/rapier.es.js';
+            const fallback = 'https://unpkg.com/@dimforge/rapier3d-compat@0.13.1/rapier.es.js';
+            try {
+                // Attempt dynamic import of ESM build; fallback if first fails
+                RAPIER = await import(primary).catch(() => import(fallback));
+                if (!RAPIER || !RAPIER.World) {
+                    throw new Error('Rapier module missing World export');
+                }
+                if (RAPIER.init) {
+                    console.log('[Rapier] Starting WASM init');
+                    await RAPIER.init();
+                    console.log('[Rapier] WASM init complete');
+                }
+                rapierWorld = new RAPIER.World({ x: 0, y: -9.82, z: 0 });
+                const vArr = new Float32Array(vertices);
+                const iArr = new Uint32Array(indices);
+                const tableDesc = RAPIER.ColliderDesc.trimesh(vArr, iArr)
+                    .setFriction(0.6)
+                    .setRestitution(0.15);
+                rapierWorld.createCollider(tableDesc);
+                rapierReady = true;
+                console.log('[Rapier] Initialized. Trimesh vertices:', vArr.length/3, 'triangles:', iArr.length/3);
+                if (queuedChipSpawns.length) {
+                    queuedChipSpawns.forEach(c => createRapierChip(c.x, c.y, c.z));
+                    queuedChipSpawns.length = 0;
+                }
+            } catch (e) {
+                console.error('[Rapier] Failed to initialize (ESM import)', e);
+            }
+        }
+
+        initRapier(); // fire and forget
+
+        function spawnChip(x, y, z) {
+            if (!rapierReady) {
+                console.warn('Rapier not ready yet; queuing chip');
+                queuedChipSpawns.push({ x, y, z });
+                return null;
+            }
+            return createRapierChip(x, y, z);
+        }
+
+        function createRapierChip(x, y, z) {
+            const chipRadius = 0.195;
+            const chipHeight = 0.04; // slight increase for more stable contact than 0.03
+            const chipGeometry = new THREE.CylinderGeometry(chipRadius, chipRadius, chipHeight, 32);
+            const chipMat = new THREE.MeshStandardMaterial({
+                color: 0xcc2222,
+                roughness: 0.4,
+                metalness: 0.3
+            });
+            const mesh = new THREE.Mesh(chipGeometry, chipMat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            // Chip wireframe (for physics debug toggle)
+            const chipEdges = new THREE.EdgesGeometry(chipGeometry);
+            const chipWire = new THREE.LineSegments(
+                chipEdges,
+                new THREE.LineBasicMaterial({ color: 0x00ffff })
+            );
+            chipWire.visible = debugState.showRapierWireframes;
+            mesh.add(chipWire);
+            const rbDesc = RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(x, y, z)
+                .setLinearDamping(0.5)
+                .setAngularDamping(0.5);
+            if (typeof rbDesc.setCcdEnabled === 'function') {
+                rbDesc.setCcdEnabled(true);
+            }
+            const rb = rapierWorld.createRigidBody(rbDesc);
+            const colDesc = RAPIER.ColliderDesc.cylinder(chipHeight/2, chipRadius)
+                .setFriction(0.55)
+                .setRestitution(0.12);
+            const collider = rapierWorld.createCollider(colDesc, rb);
+            const chip = { mesh, rb, collider, wireframe: chipWire, radius: chipRadius, height: chipHeight };
+            rapierChips.push(chip);
+            console.log('[Rapier] Spawned chip at', x, y, z);
+            return chip;
+        }
+
+        // (Optional) Cannon collision logging retained for other bodies; chips now handled by Rapier.
+
+        // --- Physics Wireframe System ---
+        let cannonWireframes = [];
+        let rapierWireframes = [];
+        const debugState = {
+            showRapierWireframes: false,
+            showCannonWireframes: false,
+            showVisualWireframes: false
+        };
+
+        function createCannonWireframe(body, shape, shapeOrientation = null, shapeOffset = null) {
+            let geometry;
+
+            if (shape instanceof CANNON.Box) {
+                const halfExtents = shape.halfExtents;
+                geometry = new THREE.BoxGeometry(
+                    halfExtents.x * 2,
+                    halfExtents.y * 2,
+                    halfExtents.z * 2
+                );
+            } else if (shape instanceof CANNON.Sphere) {
+                geometry = new THREE.SphereGeometry(shape.radius, 16, 12);
+            } else if (shape instanceof CANNON.Plane) {
+                geometry = new THREE.PlaneGeometry(60, 60, 10, 10);
+            } else if (shape instanceof CANNON.Cylinder) {
+                geometry = new THREE.CylinderGeometry(
+                    shape.radiusTop || shape.radius,
+                    shape.radiusBottom || shape.radius,
+                    shape.height,
+                    16
+                );
+            } else if (shape instanceof CANNON.ConvexPolyhedron) {
+                // Reconstruct Three.js geometry from ConvexPolyhedron vertices/faces
+                const positions = [];
+                const indices = [];
+                
+                // Convert CANNON.Vec3 vertices to flat array
+                for (let i = 0; i < shape.vertices.length; i++) {
+                    const v = shape.vertices[i];
+                    positions.push(v.x, v.y, v.z);
+                }
+                
+                // Convert faces to triangle indices
+                for (let i = 0; i < shape.faces.length; i++) {
+                    const face = shape.faces[i];
+                    // Triangulate the face (assuming convex polygons)
+                    for (let j = 1; j < face.length - 1; j++) {
+                        indices.push(face[0], face[j], face[j + 1]);
+                    }
+                }
+                
+                geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+                geometry.setIndex(indices);
+                geometry.computeVertexNormals();
+            } else if (shape instanceof CANNON.Trimesh) {
+                // Reconstruct from Trimesh
+                const positions = new Float32Array(shape.vertices);
+                const indices = new Uint32Array(shape.indices);
+                
+                geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                geometry.computeVertexNormals();
+            }
+
+            if (!geometry) return;
+
+            const group = new THREE.Group();
+            group.position.copy(body.position);
+            group.quaternion.copy(body.quaternion);
+            group.visible = debugState.showCannonWireframes;
+
+            const wireframeMesh = new THREE.LineSegments(
+                new THREE.EdgesGeometry(geometry),
+                new THREE.LineBasicMaterial({ color: 0x00ff00 })
+            );
+
+            if (shapeOrientation) {
+                wireframeMesh.quaternion.set(
+                    shapeOrientation.x,
+                    shapeOrientation.y,
+                    shapeOrientation.z,
+                    shapeOrientation.w
+                );
+            }
+            if (shapeOffset) {
+                wireframeMesh.position.set(shapeOffset.x, shapeOffset.y, shapeOffset.z);
+            }
+
+            group.add(wireframeMesh);
+            scene.add(group);
+            cannonWireframes.push({ wireframe: group, body });
+
+            return group;
+        }
+
+        // Create wireframe for trimesh table (ground wireframe intentionally omitted for clarity)
+        createCannonWireframe(tablePhysicsBody, trimeshShape);
+
+        // --- UI Controls ---
+        const showGridCheckbox = document.getElementById('showGrid');
+        const showAxesCheckbox = document.getElementById('showAxes');
+        const showRapierCheckbox = document.getElementById('showRapierWireframes');
+        const showCannonCheckbox = document.getElementById('showCannonWireframes');
+        const showVisualCheckbox = document.getElementById('showVisualWireframes');
+        const showTableWireframeCheckbox = document.getElementById('showTableWireframe');
+        const resetCameraBtn = document.getElementById('resetCamera');
+
+        showGridCheckbox.addEventListener('change', (e) => {
+            gridHelper.visible = e.target.checked;
+        });
+
+        showAxesCheckbox.addEventListener('change', (e) => {
+            axesHelper.visible = e.target.checked;
+        });
+
+        showCannonCheckbox.addEventListener('change', (e) => {
+            debugState.showCannonWireframes = e.target.checked;
+            cannonWireframes.forEach(pw => pw.wireframe.visible = debugState.showCannonWireframes);
+        });
+
+        // Rapier wireframes: generate edge lines for rapier colliders (chips & table surface)
+        function ensureRapierWireframes() {
+            if (rapierWireframes.length) return;
+            // Table collider (trimesh) from table geometry for parity; chips from their mesh geometry
+            if (table.geometry) {
+                const g = table.geometry.clone();
+                g.applyMatrix4(table.matrixWorld);
+                const edges = new THREE.EdgesGeometry(g);
+                const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xff8800 }));
+                lines.visible = debugState.showRapierWireframes;
+                scene.add(lines);
+                rapierWireframes.push(lines);
+            }
+            rapierChips.forEach(chip => {
+                if (!chip.mesh) return;
+                const cyl = chip.mesh.geometry.clone();
+                cyl.applyMatrix4(chip.mesh.matrixWorld);
+                const edges = new THREE.EdgesGeometry(cyl);
+                const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xff8800 }));
+                lines.visible = debugState.showRapierWireframes;
+                scene.add(lines);
+                rapierWireframes.push(lines);
+            });
+        }
+        showRapierCheckbox.addEventListener('change', (e) => {
+            debugState.showRapierWireframes = e.target.checked;
+            ensureRapierWireframes();
+            rapierWireframes.forEach(wf => wf.visible = debugState.showRapierWireframes);
+        });
+
+        // Visual wireframe mode (material transformation)
+        const originalVisualMaterialProps = new Map();
+        function setVisualWireframeMode(on) {
+            scene.traverse(obj => {
+                if (!obj.isMesh) return;
+                if (obj.type === 'LineSegments') return; // skip helper lines
+                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+                if (on) {
+                    if (!originalVisualMaterialProps.has(obj.uuid)) {
+                        originalVisualMaterialProps.set(obj.uuid, mats.map(m => ({ material: m, wireframe: m.wireframe, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite })));
+                    }
+                    mats.forEach(m => { m.wireframe = true; m.transparent = true; m.opacity = 0.2; m.depthWrite = false; m.needsUpdate = true; });
+                } else {
+                    const stored = originalVisualMaterialProps.get(obj.uuid);
+                    if (stored) stored.forEach(s => { s.material.wireframe = s.wireframe; s.material.transparent = s.transparent; s.material.opacity = s.opacity; s.material.depthWrite = s.depthWrite; s.material.needsUpdate = true; });
+                }
+            });
+        }
+        showVisualCheckbox.addEventListener('change', (e) => {
+            debugState.showVisualWireframes = e.target.checked;
+            setVisualWireframeMode(debugState.showVisualWireframes);
+        });
+
+        showTableWireframeCheckbox.addEventListener('change', (e) => {
+            const on = e.target.checked;
+            // Toggle wireframe & adjust transparency for visibility
+            table.material.wireframe = on;
+            table.material.transparent = on;
+            table.material.opacity = on ? 0.25 : 1.0;
+            table.material.depthWrite = !on; // reduce z fighting when wireframe
+            table.material.needsUpdate = true;
+            console.log('[TableWireframe] state ->', on);
+        });
+
+        resetCameraBtn.addEventListener('click', () => {
+            camera.position.set(10, 8, 10);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        });
+
+        const spawnChipBtn = document.getElementById('spawnChip');
+        spawnChipBtn.addEventListener('click', () => {
+            // Spawn chip just above the table surface at center
+            const spawnY = FELT_TOP_Y + 0.5; // 0.5 units above table top
+            spawnChip(0, spawnY, 0);
+        });
+
+        // --- Window Resize ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- Animation Loop ---
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let lastFpsUpdate = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+
+            // Update Cannon physics (room, etc.)
+            world.step(1 / 60, deltaTime, 3);
+            // Update Rapier physics (chips/table) if ready
+            if (rapierReady) {
+                rapierWorld.step();
+            }
+
+            // Update physics wireframes
+            physicsWireframes.forEach(pw => {
+                pw.wireframe.position.copy(pw.body.position);
+                pw.wireframe.quaternion.copy(pw.body.quaternion);
+            });
+            
+            // Sync Rapier chips
+            if (rapierReady) {
+                const EPS = 0.0001;
+                rapierChips.forEach(chip => {
+                    const t = chip.rb.translation();
+                    const r = chip.rb.rotation();
+                    // Optional tiny lift if visually clipping
+                    const bottomY = t.y - chip.height / 2;
+                    let yAdj = t.y;
+                    if (bottomY < FELT_TOP_Y - EPS) {
+                        yAdj = FELT_TOP_Y + chip.height / 2 + EPS;
+                        chip.rb.setTranslation({ x: t.x, y: yAdj, z: t.z }, true);
+                    }
+                    chip.mesh.position.set(t.x, yAdj, t.z);
+                    chip.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+                });
+            }
+
+            // Update FPS counter
+            frameCount++;
+            if (now - lastFpsUpdate >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+
+            // Update body count
+            document.getElementById('bodyCount').textContent = world.bodies.length;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Log initialization
+        console.log('Physics Debug Environment initialized');
+        console.log('Physics world:', world);
+        console.log('Bodies:', world.bodies.length);
+    </script>
+</body>
+</html>
