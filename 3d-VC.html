@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D VC - Justin M. Perez</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+            background: #1a1a1a;
+        }
+
+        #c {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+
+        nav a {
+            color: white;
+            margin-right: 14px;
+            text-decoration: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            background: rgba(255,255,255,0.1);
+        }
+
+        .game-info {
+            position: fixed;
+            top: 60px;
+            left: 10px;
+            z-index: 100;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .game-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="./index.html">Home</a>
+        <a href="./projects.html">Projects</a>
+        <a href="./resume.pdf" class="btn">Resume</a>
+    </nav>
+
+    <div class="game-info">
+        <h3>VC Card Game</h3>
+        <div style="margin-top: 10px; font-style: italic;">Foundation - Shoe initialized and ready</div>
+    </div>
+
+    <canvas id="c"></canvas>
+
+    <script type="module">
+        // Import cannon-es as ES module
+        import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm';
+        // Make it globally available
+        window.CANNON = CANNON;
+    </script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three/three.module.js",
+        "three/addons/": "./lib/three/",
+        "lil-gui": "./lib/lil-gui/lil-gui.esm.js"
+      }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/OrbitControls.js';
+        import GUI from 'lil-gui';
+
+        // --- Real-world scaling helpers ---
+        const TABLE_WIDTH_UNITS = 10.4;
+        const REAL_TABLE_WIDTH_M = 2.1;
+        const UNIT_IN_METERS = REAL_TABLE_WIDTH_M / TABLE_WIDTH_UNITS;
+
+        // Standard casino card dimensions (meters)
+        const CARD_REAL = { length: 0.0889, width: 0.0635, thickness: 0.0003 };
+        const CARD = {
+            length: CARD_REAL.length / UNIT_IN_METERS,
+            width: CARD_REAL.width / UNIT_IN_METERS,
+            thickness: Math.max(CARD_REAL.thickness / UNIT_IN_METERS, 0.0015)
+        };
+
+        // Global vertical adjustment - table raised close to shoe with small gap to avoid z-fighting
+        const TABLE_Y_SHIFT = 0.04;
+        const FELT_TOP_Y = 0;
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(0, 6, 8);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: document.getElementById('c'),
+            antialias: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const MAX_ANISO = (renderer.capabilities.getMaxAnisotropy
+            ? renderer.capabilities.getMaxAnisotropy()
+            : (renderer.capabilities.maxAnisotropy || 1));
+        let CARD_TEXTURE_ANISO = MAX_ANISO;
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 4;
+        controls.maxDistance = 20;
+        controls.maxPolarAngle = Math.PI / 2.1;
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xfff4e6, 0.5);
+        scene.add(ambientLight);
+
+        // Debug helpers
+        const axes = new THREE.AxesHelper(5);
+        axes.visible = false;
+        scene.add(axes);
+
+        const grid = new THREE.GridHelper(30, 30, 0x00aaff, 0x334455);
+        grid.material.opacity = 0.35;
+        grid.material.transparent = true;
+        grid.visible = false;
+        scene.add(grid);
+
+        // --- Man Cave Room (same as blackjack) ---
+        const roomGroup = new THREE.Group();
+        
+        const ROOM = {
+            width: 24,
+            depth: 18,
+            height: 12,
+            wallThickness: 0.3,
+            wainscotHeight: 2.6,
+            floorY: -3.65,
+            ceilingY: 8.35
+        };
+        
+        const floorMat = new THREE.MeshStandardMaterial({ 
+            color: 0xc9b89a, 
+            roughness: 0.8, 
+            metalness: 0.0 
+        });
+        
+        const wallUpperMat = new THREE.MeshStandardMaterial({ 
+            color: 0x3a3a3a,
+            roughness: 0.85, 
+            metalness: 0.0,
+            flatShading: false
+        });
+        
+        const woodPanelMat = new THREE.MeshStandardMaterial({ 
+            color: 0x4a3520,
+            roughness: 0.65, 
+            metalness: 0.05 
+        });
+        
+        const ceilingMat = new THREE.MeshStandardMaterial({ 
+            color: 0xe8dcc8, 
+            roughness: 0.9, 
+            metalness: 0.0 
+        });
+        
+        const trimMat = new THREE.MeshStandardMaterial({ 
+            color: 0x5a4738,
+            roughness: 0.5, 
+            metalness: 0.2 
+        });
+        
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth),
+            floorMat
+        );
+        floor.position.set(0, ROOM.floorY, 0);
+        floor.receiveShadow = true;
+        roomGroup.add(floor);
+        
+        // Ceiling
+        const ceiling = new THREE.Mesh(
+            new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth),
+            ceilingMat
+        );
+        ceiling.position.set(0, ROOM.ceilingY, 0);
+        ceiling.receiveShadow = true;
+        roomGroup.add(ceiling);
+        
+        function createWallWithWainscot(w, h, x, y, z, rotY) {
+            const wallGroup = new THREE.Group();
+            
+            const wainscot = new THREE.Mesh(
+                new THREE.BoxGeometry(w, ROOM.wainscotHeight, ROOM.wallThickness),
+                woodPanelMat
+            );
+            wainscot.position.set(0, ROOM.wainscotHeight/2 + ROOM.floorY + 0.1, 0);
+            wainscot.castShadow = true;
+            wainscot.receiveShadow = true;
+            wallGroup.add(wainscot);
+            
+            const panelLineCount = Math.floor(w / 1.2);
+            const panelLineMat = new THREE.MeshStandardMaterial({ 
+                color: 0x332211, 
+                roughness: 0.7, 
+                metalness: 0.05 
+            });
+            for (let i = 0; i < panelLineCount; i++) {
+                const lineX = -w/2 + (i + 0.5) * (w / panelLineCount);
+                const line = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.02, ROOM.wainscotHeight, ROOM.wallThickness + 0.02),
+                    panelLineMat
+                );
+                line.position.set(lineX, ROOM.wainscotHeight/2 + ROOM.floorY + 0.1, 0.01);
+                line.castShadow = false;
+                line.receiveShadow = false;
+                wallGroup.add(line);
+            }
+            
+            const upperH = h - ROOM.wainscotHeight - 0.3;
+            const upper = new THREE.Mesh(
+                new THREE.BoxGeometry(w, upperH, ROOM.wallThickness),
+                wallUpperMat
+            );
+            upper.position.set(0, ROOM.wainscotHeight + upperH/2 + ROOM.floorY + 0.1, 0);
+            upper.castShadow = true;
+            upper.receiveShadow = true;
+            wallGroup.add(upper);
+            
+            const crown = new THREE.Mesh(
+                new THREE.BoxGeometry(w, 0.12, ROOM.wallThickness + 0.08),
+                trimMat
+            );
+            crown.position.set(0, ROOM.ceilingY - 0.1, 0);
+            crown.castShadow = true;
+            wallGroup.add(crown);
+            
+            const baseboard = new THREE.Mesh(
+                new THREE.BoxGeometry(w, 0.15, ROOM.wallThickness + 0.06),
+                trimMat
+            );
+            baseboard.position.set(0, ROOM.floorY + 0.075, 0);
+            baseboard.castShadow = true;
+            wallGroup.add(baseboard);
+            
+            wallGroup.position.set(x, y, z);
+            wallGroup.rotation.y = rotY;
+            return wallGroup;
+        }
+        
+        const roomBackWall = createWallWithWainscot(ROOM.width, ROOM.height, 0, 0, -ROOM.depth/2, 0);
+        roomGroup.add(roomBackWall);
+        
+        const frontLeftWall = createWallWithWainscot(ROOM.width * 0.25, ROOM.height, -ROOM.width/2 + ROOM.width * 0.125, 0, ROOM.depth/2, 0);
+        roomGroup.add(frontLeftWall);
+        
+        const frontRightWall = createWallWithWainscot(ROOM.width * 0.25, ROOM.height, ROOM.width/2 - ROOM.width * 0.125, 0, ROOM.depth/2, 0);
+        roomGroup.add(frontRightWall);
+        
+        const leftWallWidth = ROOM.depth;
+        const roomLeftWall = createWallWithWainscot(leftWallWidth, ROOM.height, -ROOM.width/2, 0, 0, Math.PI/2);
+        roomGroup.add(roomLeftWall);
+        
+        const roomRightWall = createWallWithWainscot(leftWallWidth, ROOM.height, ROOM.width/2, 0, 0, Math.PI/2);
+        roomGroup.add(roomRightWall);
+        
+        // Lighting
+        const mainCeilingLight = new THREE.SpotLight(0xfff4e6, 12, 40, Math.PI * 0.85, 0.25, 1.5);
+        mainCeilingLight.position.set(0, ROOM.ceilingY - 0.2, 0);
+        mainCeilingLight.castShadow = true;
+        mainCeilingLight.shadow.mapSize.width = 1024;
+        mainCeilingLight.shadow.mapSize.height = 1024;
+        mainCeilingLight.shadow.camera.near = 0.5;
+        mainCeilingLight.shadow.camera.far = 40;
+        mainCeilingLight.shadow.camera.fov = 110;
+        mainCeilingLight.shadow.bias = -0.0001;
+        mainCeilingLight.shadow.radius = 2;
+        
+        const lightTarget = new THREE.Object3D();
+        lightTarget.position.set(0, 0, 0);
+        scene.add(lightTarget);
+        mainCeilingLight.target = lightTarget;
+        roomGroup.add(mainCeilingLight);
+        
+        const mainFixture = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.6, 0.7, 0.15, 16),
+            new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3, metalness: 0.7 })
+        );
+        mainFixture.position.set(0, ROOM.ceilingY - 0.08, 0);
+        mainFixture.rotation.x = Math.PI;
+        mainFixture.castShadow = false;
+        roomGroup.add(mainFixture);
+        
+        const lightBulb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.35, 16, 12),
+            new THREE.MeshStandardMaterial({ 
+                color: 0xffffff, 
+                emissive: 0xfff4e6, 
+                emissiveIntensity: 5.0,
+                roughness: 0.2,
+                metalness: 0.1
+            })
+        );
+        lightBulb.position.set(0, ROOM.ceilingY - 0.4, 0);
+        roomGroup.add(lightBulb);
+        
+        // Shelving
+        function createShelf(width, depth, x, y, z) {
+            const shelfGroup = new THREE.Group();
+            
+            const shelf = new THREE.Mesh(
+                new THREE.BoxGeometry(width, 0.08, depth),
+                woodPanelMat
+            );
+            shelf.position.set(0, 0, 0);
+            shelf.castShadow = true;
+            shelf.receiveShadow = true;
+            shelfGroup.add(shelf);
+            
+            const backSupport = new THREE.Mesh(
+                new THREE.BoxGeometry(width, 0.12, 0.1),
+                trimMat
+            );
+            backSupport.position.set(0, 0, -depth/2 + 0.05);
+            backSupport.castShadow = true;
+            backSupport.receiveShadow = true;
+            shelfGroup.add(backSupport);
+            
+            const sideSupport1 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.3, depth * 0.7),
+                trimMat
+            );
+            sideSupport1.position.set(-width/2 + 0.15, -0.15, 0);
+            sideSupport1.castShadow = true;
+            sideSupport1.receiveShadow = true;
+            shelfGroup.add(sideSupport1);
+            
+            const sideSupport2 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.3, depth * 0.7),
+                trimMat
+            );
+            sideSupport2.position.set(width/2 - 0.15, -0.15, 0);
+            sideSupport2.castShadow = true;
+            sideSupport2.receiveShadow = true;
+            shelfGroup.add(sideSupport2);
+            
+            shelfGroup.position.set(x, y, z);
+            return shelfGroup;
+        }
+        
+        const shelfDepth = 0.8;
+        const shelfY1 = ROOM.wainscotHeight + 0.8 + ROOM.floorY;
+        const shelfY2 = shelfY1 + 1.2;
+        const shelfY3 = shelfY2 + 1.2;
+        
+        roomGroup.add(createShelf(3.5, shelfDepth, -7, shelfY1, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+        roomGroup.add(createShelf(3.5, shelfDepth, -7, shelfY2, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+        roomGroup.add(createShelf(3.5, shelfDepth, -7, shelfY3, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+        
+        roomGroup.add(createShelf(3.5, shelfDepth, 7, shelfY1, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+        roomGroup.add(createShelf(3.5, shelfDepth, 7, shelfY2, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+        roomGroup.add(createShelf(3.5, shelfDepth, 7, shelfY3, -ROOM.depth/2 + shelfDepth/2 + 0.15));
+        
+        function addBook(width, height, depth, x, y, z, colorHex) {
+            const book = new THREE.Mesh(
+                new THREE.BoxGeometry(width, height, depth),
+                new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.8 })
+            );
+            book.position.set(x, y, z);
+            book.castShadow = true;
+            book.receiveShadow = true;
+            roomGroup.add(book);
+        }
+        
+        const bookZ = -ROOM.depth/2 + 0.5;
+        addBook(0.15, 0.5, 0.3, -8.2, shelfY1 + 0.29, bookZ, 0x8b0000);
+        addBook(0.15, 0.45, 0.3, -8.0, shelfY1 + 0.27, bookZ, 0x2f4f4f);
+        addBook(0.15, 0.52, 0.3, -7.8, shelfY1 + 0.30, bookZ, 0x556b2f);
+        addBook(0.15, 0.48, 0.3, -7.6, shelfY1 + 0.28, bookZ, 0x8b4513);
+        addBook(0.15, 0.50, 0.3, -7.4, shelfY1 + 0.29, bookZ, 0x191970);
+        
+        addBook(0.15, 0.48, 0.3, -8.1, shelfY2 + 0.28, bookZ, 0x800020);
+        addBook(0.15, 0.50, 0.3, -7.9, shelfY2 + 0.29, bookZ, 0x2f4f2f);
+        addBook(0.15, 0.46, 0.3, -7.7, shelfY2 + 0.27, bookZ, 0x654321);
+        
+        addBook(0.15, 0.50, 0.3, 6.4, shelfY1 + 0.29, bookZ, 0x8b0000);
+        addBook(0.15, 0.48, 0.3, 6.6, shelfY1 + 0.28, bookZ, 0x2f4f4f);
+        addBook(0.15, 0.52, 0.3, 6.8, shelfY1 + 0.30, bookZ, 0x8b4513);
+        addBook(0.15, 0.47, 0.3, 7.0, shelfY1 + 0.28, bookZ, 0x191970);
+        
+        scene.add(roomGroup);
+
+        // --- Physics World ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+        world.broadphase = new CANNON.SAPBroadphase(world);
+        world.solver.iterations = 30;
+        world.solver.tolerance = 0.0001;
+        world.defaultContactMaterial.contactEquationStiffness = 1e10;
+        world.defaultContactMaterial.contactEquationRelaxation = 1;
+        
+        if (world.narrowphase) {
+            world.allowSleep = true;
+        }
+        
+        const physTableMaterial = new CANNON.Material('table');
+        const physCardMaterial = new CANNON.Material('card');
+        
+        const tableCardContact = new CANNON.ContactMaterial(physTableMaterial, physCardMaterial, {
+            friction: 0.6,
+            restitution: 0.1
+        });
+        world.addContactMaterial(tableCardContact);
+        
+        const cardCardContact = new CANNON.ContactMaterial(physCardMaterial, physCardMaterial, {
+            friction: 0.5,
+            restitution: 0.0
+        });
+        world.addContactMaterial(cardCardContact);
+
+        // --- Room Physics Boundaries ---
+        const floorShape = new CANNON.Box(new CANNON.Vec3(ROOM.width / 2, 0.1, ROOM.depth / 2));
+        const floorBody = new CANNON.Body({
+            mass: 0,
+            shape: floorShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, ROOM.floorY, 0)
+        });
+        world.addBody(floorBody);
+        
+        const ceilingShape = new CANNON.Box(new CANNON.Vec3(ROOM.width / 2, 0.1, ROOM.depth / 2));
+        const ceilingBody = new CANNON.Body({
+            mass: 0,
+            shape: ceilingShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, ROOM.ceilingY, 0)
+        });
+        world.addBody(ceilingBody);
+        
+        const backWallShape = new CANNON.Box(new CANNON.Vec3(ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2));
+        const backWallBody = new CANNON.Body({
+            mass: 0,
+            shape: backWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, (ROOM.floorY + ROOM.ceilingY) / 2, -ROOM.depth / 2)
+        });
+        world.addBody(backWallBody);
+        
+        const frontLeftWidth = ROOM.width * 0.25;
+        const frontLeftWallShape = new CANNON.Box(new CANNON.Vec3(frontLeftWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2));
+        const frontLeftWallBody = new CANNON.Body({
+            mass: 0,
+            shape: frontLeftWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(-ROOM.width / 2 + frontLeftWidth / 2, (ROOM.floorY + ROOM.ceilingY) / 2, ROOM.depth / 2)
+        });
+        world.addBody(frontLeftWallBody);
+        
+        const frontRightWallShape = new CANNON.Box(new CANNON.Vec3(frontLeftWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2));
+        const frontRightWallBody = new CANNON.Body({
+            mass: 0,
+            shape: frontRightWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(ROOM.width / 2 - frontLeftWidth / 2, (ROOM.floorY + ROOM.ceilingY) / 2, ROOM.depth / 2)
+        });
+        world.addBody(frontRightWallBody);
+        
+        const leftWallShape = new CANNON.Box(new CANNON.Vec3(ROOM.wallThickness / 2, ROOM.height / 2, ROOM.depth / 2));
+        const leftWallBody = new CANNON.Body({
+            mass: 0,
+            shape: leftWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(-ROOM.width / 2, (ROOM.floorY + ROOM.ceilingY) / 2, 0)
+        });
+        world.addBody(leftWallBody);
+        
+        const rightWallShape = new CANNON.Box(new CANNON.Vec3(ROOM.wallThickness / 2, ROOM.height / 2, ROOM.depth / 2));
+        const rightWallBody = new CANNON.Body({
+            mass: 0,
+            shape: rightWallShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(ROOM.width / 2, (ROOM.floorY + ROOM.ceilingY) / 2, 0)
+        });
+        world.addBody(rightWallBody);
+        
+        const shelfBodies = [];
+        const shelfPhysWidth = 3.5;
+        const shelfPhysDepth = 0.8;
+        const shelfPhysThickness = 0.08;
+        const shelfPhysY1 = ROOM.wainscotHeight + 0.8 + ROOM.floorY;
+        const shelfPhysY2 = shelfPhysY1 + 1.2;
+        const shelfPhysY3 = shelfPhysY2 + 1.2;
+        const shelfPhysZ = -ROOM.depth/2 + shelfPhysDepth/2 + 0.15;
+        
+        function addShelfPhysics(x, y, z) {
+            const shelfShape = new CANNON.Box(new CANNON.Vec3(shelfPhysWidth / 2, shelfPhysThickness / 2, shelfPhysDepth / 2));
+            const shelfBody = new CANNON.Body({
+                mass: 0,
+                shape: shelfShape,
+                material: physTableMaterial,
+                position: new CANNON.Vec3(x, y, z)
+            });
+            world.addBody(shelfBody);
+            shelfBodies.push({ body: shelfBody, shape: shelfShape });
+        }
+        
+        addShelfPhysics(-7, shelfPhysY1, shelfPhysZ);
+        addShelfPhysics(-7, shelfPhysY2, shelfPhysZ);
+        addShelfPhysics(-7, shelfPhysY3, shelfPhysZ);
+        addShelfPhysics(7, shelfPhysY1, shelfPhysZ);
+        addShelfPhysics(7, shelfPhysY2, shelfPhysZ);
+        addShelfPhysics(7, shelfPhysY3, shelfPhysZ);
+
+        // --- Shuffle Animation (tween system) ---
+        const activeTweens = [];
+        const SHUFFLE_TIME_SCALE = 0.7;
+        const st = (ms) => Math.max(10, ms * SHUFFLE_TIME_SCALE);
+        function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2; }
+        function clamp01(v){ return v < 0 ? 0 : v > 1 ? 1 : v; }
+        function shortestAngleDelta(from, to) {
+            const twoPi = Math.PI * 2;
+            return ((to - from + Math.PI * 3) % twoPi) - Math.PI;
+        }
+        function lerpAngle(from, to, t) {
+            return from + shortestAngleDelta(from, to) * t;
+        }
+        function getObjectYRotation(obj) {
+            const e = new THREE.Euler();
+            e.setFromQuaternion(obj.quaternion, 'YXZ');
+            return e.y;
+        }
+        function setCardQuaternion(targetQuat, rotX, rotY, rotZ) {
+            targetQuat.setFromEuler(new THREE.Euler(rotX, rotY, rotZ, 'YXZ'));
+        }
+
+        let cameraAnimation = null;
+        const originalCameraPosition = { x: 0, y: 6, z: 8 };
+        const originalCameraTarget = { x: 0, y: 0, z: 0 };
+
+        function saveCameraPosition() {
+            originalCameraPosition.x = camera.position.x;
+            originalCameraPosition.y = camera.position.y;
+            originalCameraPosition.z = camera.position.z;
+            originalCameraTarget.x = controls.target.x;
+            originalCameraTarget.y = controls.target.y;
+            originalCameraTarget.z = controls.target.z;
+        }
+
+        function animateCameraToShoe(duration = 1000) {
+            saveCameraPosition();
+            
+            const shoePos = SHOE_POS;
+            const targetPos = {
+                x: shoePos.x - 1.5,
+                y: shoePos.y + 1.2,
+                z: shoePos.z + 2
+            };
+            const targetLookAt = {
+                x: shoePos.x,
+                y: shoePos.y + 0.3,
+                z: shoePos.z
+            };
+            
+            const startTime = performance.now();
+            const startPos = { ...originalCameraPosition };
+            const startLookAt = { ...originalCameraTarget };
+            
+            cameraAnimation = {
+                type: 'toShoe',
+                startTime,
+                duration,
+                startPos,
+                startLookAt,
+                targetPos,
+                targetLookAt
+            };
+        }
+
+        function animateCameraBack(duration = 1200) {
+            const startPos = {
+                x: camera.position.x,
+                y: camera.position.y,
+                z: camera.position.z
+            };
+            const startLookAt = {
+                x: controls.target.x,
+                y: controls.target.y,
+                z: controls.target.z
+            };
+            
+            const startTime = performance.now();
+            
+            cameraAnimation = {
+                type: 'back',
+                startTime,
+                duration,
+                startPos,
+                startLookAt,
+                targetPos: originalCameraPosition,
+                targetLookAt: originalCameraTarget
+            };
+        }
+
+        function updateCameraAnimation(timeNow) {
+            if (!cameraAnimation) return;
+            
+            const elapsed = timeNow - cameraAnimation.startTime;
+            const t = clamp01(elapsed / cameraAnimation.duration);
+            const eased = easeInOutQuad(t);
+            
+            camera.position.x = cameraAnimation.startPos.x + (cameraAnimation.targetPos.x - cameraAnimation.startPos.x) * eased;
+            camera.position.y = cameraAnimation.startPos.y + (cameraAnimation.targetPos.y - cameraAnimation.startPos.y) * eased;
+            camera.position.z = cameraAnimation.startPos.z + (cameraAnimation.targetPos.z - cameraAnimation.startPos.z) * eased;
+            
+            controls.target.x = cameraAnimation.startLookAt.x + (cameraAnimation.targetLookAt.x - cameraAnimation.startLookAt.x) * eased;
+            controls.target.y = cameraAnimation.startLookAt.y + (cameraAnimation.targetLookAt.y - cameraAnimation.startLookAt.y) * eased;
+            controls.target.z = cameraAnimation.startLookAt.z + (cameraAnimation.targetLookAt.z - cameraAnimation.startLookAt.z) * eased;
+            
+            controls.update();
+            
+            if (t >= 1) {
+                cameraAnimation = null;
+            }
+        }
+
+        function addShuffleTween(sc, toY, options = {}) {
+            const now = performance.now();
+            const duration = options.duration ?? 280;
+            const delay = options.delay ?? 0;
+            const bump = options.bump ?? 0.05;
+            const swayX = options.swayX ?? (Math.random() - 0.5) * 0.08;
+            const swayZ = options.swayZ ?? (Math.random() - 0.5) * 0.08;
+            const centerX = options.centerX;
+            const centerZ = options.centerZ;
+            const centerLerp = options.centerLerp ?? 0;
+            const fromY = sc.body.position.y;
+            const baseX = sc.body.position.x;
+            const baseZ = sc.body.position.z;
+            const tween = {
+                sc, fromY, toY, baseX, baseZ, duration, start: now + delay, bump, swayX, swayZ,
+                centerX, centerZ, centerLerp,
+                done: false
+            };
+            activeTweens.push(tween);
+        }
+
+        function addSlideTween(sc, fromX, fromZ, toX, toZ, fromY, toY, duration = 260, options = {}) {
+            const startTime = performance.now();
+            const useMesh = options.useMesh ?? false;
+            const fromRotY = options.fromRotY ?? getObjectYRotation(useMesh ? sc.mesh : sc.body);
+            const toRotY = options.toRotY ?? fromRotY;
+            const rotStart = options.rotStart ?? 0;
+            const rotEnd = options.rotEnd ?? 1;
+            const rotX = options.rotX ?? Math.PI;
+            const rotZ = options.rotZ ?? 0;
+            const lift = options.lift ?? 0;
+            activeTweens.push({
+                sc,
+                slide: true,
+                fromX,
+                fromZ,
+                toX,
+                toZ,
+                fromY,
+                toY,
+                lift,
+                fromRotY,
+                toRotY,
+                rotStart,
+                rotEnd,
+                rotX,
+                rotZ,
+                useMesh,
+                duration,
+                start: startTime
+            });
+        }
+
+        function updateShuffleTweens(timeNow) {
+            if (activeTweens.length === 0) return;
+            for (let i = activeTweens.length - 1; i >= 0; i--) {
+                const twn = activeTweens[i];
+                
+                if (twn.slide) {
+                    const t = (timeNow - twn.start) / twn.duration;
+                    if (t < 0) continue;
+                    const tt = clamp01(t);
+                    const e = easeInOutQuad(tt);
+                    const x = twn.fromX + (twn.toX - twn.fromX) * e;
+                    const z = twn.fromZ + (twn.toZ - twn.fromZ) * e;
+                    const y = twn.fromY + (twn.toY - twn.fromY) * e + Math.sin(Math.PI * tt) * twn.lift;
+                    const rotT = clamp01((tt - twn.rotStart) / Math.max(0.0001, twn.rotEnd - twn.rotStart));
+                    const rotY = lerpAngle(twn.fromRotY, twn.toRotY, easeInOutQuad(rotT));
+                    if (twn.useMesh) {
+                        twn.sc.mesh.position.set(x, y, z);
+                        setCardQuaternion(twn.sc.mesh.quaternion, twn.rotX, rotY, twn.rotZ);
+                    } else {
+                        twn.sc.body.position.set(x, y, z);
+                        setCardQuaternion(twn.sc.body.quaternion, twn.rotX, rotY, twn.rotZ);
+                        twn.sc.mesh.position.copy(twn.sc.body.position);
+                        twn.sc.mesh.quaternion.copy(twn.sc.body.quaternion);
+                    }
+                    if (tt >= 1) {
+                        activeTweens.splice(i, 1);
+                    }
+                    continue;
+                }
+                
+                const t = (timeNow - twn.start) / twn.duration;
+                if (t < 0) continue;
+                const tt = clamp01(t);
+                const e = easeInOutQuad(tt);
+                const y = twn.fromY + (twn.toY - twn.fromY) * e + Math.sin(Math.PI * tt) * twn.bump;
+                const swayPhase = Math.sin(Math.PI * tt);
+                let x = twn.baseX + twn.swayX * swayPhase;
+                let z = twn.baseZ + twn.swayZ * swayPhase;
+                if (twn.centerLerp && (twn.centerX !== undefined || twn.centerZ !== undefined)) {
+                    const lerpAmt = twn.centerLerp * e;
+                    if (twn.centerX !== undefined) x = x + (twn.centerX - twn.baseX) * lerpAmt;
+                    if (twn.centerZ !== undefined) z = z + (twn.centerZ - twn.baseZ) * lerpAmt;
+                }
+                twn.sc.body.position.set(x, y, z);
+                twn.sc.mesh.position.copy(twn.sc.body.position);
+                if (tt >= 1) {
+                    activeTweens.splice(i, 1);
+                }
+            }
+        }
+
+        const debugState = {
+            showCannonWireframes: false,
+            showVisualWireframes: false
+        };
+
+        // --- Square Table ---
+        const TABLE_SIZE = 4.5; // Smaller square table
+        const TABLE_THICKNESS = 0.13;
+        
+        const tableGeometry = new THREE.BoxGeometry(TABLE_SIZE, TABLE_THICKNESS, TABLE_SIZE);
+        const tableMaterial = new THREE.MeshStandardMaterial({
+            color: 0x0a5f1e,
+            roughness: 0.8,
+            metalness: 0.0
+        });
+        const table = new THREE.Mesh(tableGeometry, tableMaterial);
+        table.position.y = -TABLE_THICKNESS/2 + TABLE_Y_SHIFT;
+        table.receiveShadow = true;
+        table.castShadow = true;
+        scene.add(table);
+
+        // Table physics
+        const tableShape = new CANNON.Box(new CANNON.Vec3(TABLE_SIZE/2, TABLE_THICKNESS/2, TABLE_SIZE/2));
+        const tableBody = new CANNON.Body({
+            mass: 0,
+            shape: tableShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, -TABLE_THICKNESS/2 + TABLE_Y_SHIFT, 0)
+        });
+        world.addBody(tableBody);
+
+        // Table rail (border)
+        const RAIL_HEIGHT = 0.156;
+        const RAIL_WIDTH = 0.15;
+        
+        function createRailSegment(length, width, height, x, y, z, rotY = 0) {
+            const geometry = new THREE.BoxGeometry(length, width, height);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x2d1810,
+                roughness: 0.6,
+                metalness: 0.1
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.rotation.y = rotY;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            
+            // Physics
+            const shape = new CANNON.Box(new CANNON.Vec3(length/2, height/2, width/2));
+            const body = new CANNON.Body({
+                mass: 0,
+                shape: shape,
+                material: physTableMaterial
+            });
+            body.position.set(x, y, z);
+            body.quaternion.setFromEuler(0, rotY, 0);
+            world.addBody(body);
+            
+            return mesh;
+        }
+        
+        const railY = -RAIL_HEIGHT/2 + TABLE_Y_SHIFT;
+        const offset = TABLE_SIZE/2 + RAIL_WIDTH/2;
+        
+        // Four sides of the rail
+        createRailSegment(TABLE_SIZE + RAIL_WIDTH*2, RAIL_HEIGHT, RAIL_WIDTH, 0, railY, -offset);
+        createRailSegment(TABLE_SIZE + RAIL_WIDTH*2, RAIL_HEIGHT, RAIL_WIDTH, 0, railY, offset);
+        createRailSegment(RAIL_WIDTH, RAIL_HEIGHT, TABLE_SIZE, -offset, railY, 0);
+        createRailSegment(RAIL_WIDTH, RAIL_HEIGHT, TABLE_SIZE, offset, railY, 0);
+
+        // Table pedestal
+        const pedestalGeometry = new THREE.CylinderGeometry(0.65, 1.04, 3.25, 16);
+        const pedestalMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3d2817,
+            roughness: 0.7,
+            metalness: 0.2
+        });
+        const pedestal = new THREE.Mesh(pedestalGeometry, pedestalMaterial);
+        pedestal.position.y = -1.625;
+        pedestal.castShadow = true;
+        pedestal.receiveShadow = true;
+        scene.add(pedestal);
+
+        // Table base
+        const baseGeometry = new THREE.CylinderGeometry(1.56, 1.95, 0.39, 16);
+        const base = new THREE.Mesh(baseGeometry, pedestalMaterial);
+        base.position.y = -3.445 + TABLE_Y_SHIFT;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        scene.add(base);
+
+        // --- Card Shoe (Cards only, no structure) ---
+        const SHOE_WIDTH = CARD.width * 1.3;
+        const SHOE_HEIGHT = CARD.thickness * 312 * 1.5;
+        const SHOE_DEPTH = CARD.length * 1.2;
+        const SHOE_POS = { x: 0, y: TABLE_Y_SHIFT + CARD.thickness/2, z: 0 };
+
+        // --- Card Deck and Shoe State ---
+        const suits = ['♠', '♥', '♦', '♣'];
+        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        
+        let shoeCards = [];
+        let isShuffling = false;
+
+        // Create card back texture
+        function createCardBackTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 3072;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#0a4a8a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 64;
+            ctx.strokeRect(96, 96, canvas.width - 192, canvas.height - 192);
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 24;
+            ctx.strokeRect(192, 192, canvas.width - 384, canvas.height - 384);
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.fillStyle = '#ffffff';
+            ctx.lineWidth = 16;
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            for (let i = 0; i < 12; i++) {
+                const angle = (i / 12) * Math.PI * 2;
+                const radius = 480;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 64, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 200, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.lineWidth = 32;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 120, 0, Math.PI * 2);
+            ctx.fill();
+            
+            function drawCornerDiamond(x, y, size) {
+                ctx.beginPath();
+                ctx.moveTo(x, y - size);
+                ctx.lineTo(x + size, y);
+                ctx.lineTo(x, y + size);
+                ctx.lineTo(x - size, y);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y - size/2);
+                ctx.lineTo(x + size/2, y);
+                ctx.lineTo(x, y + size/2);
+                ctx.lineTo(x - size/2, y);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            ctx.lineWidth = 16;
+            drawCornerDiamond(480, 480, 160);
+            drawCornerDiamond(canvas.width - 480, 480, 160);
+            drawCornerDiamond(480, canvas.height - 480, 160);
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 24;
+            for (let i = 0; i < 4; i++) {
+                const offset = 640 + i * 120;
+                ctx.beginPath();
+                ctx.moveTo(centerX - offset, 320);
+                ctx.quadraticCurveTo(centerX, centerY - 320, centerX + offset, 320);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(centerX - offset, canvas.height - 320);
+                ctx.quadraticCurveTo(centerX, centerY + 320, centerX + offset, canvas.height - 320);
+                ctx.stroke();
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.anisotropy = CARD_TEXTURE_ANISO;
+            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.generateMipmaps = true;
+            return texture;
+        }
+
+        const cardBackTexture = createCardBackTexture();
+
+        const faceTextureCache = new Map();
+        function getFaceMaterial(card, res = '1k') {
+            const key = `${card.rank}-${card.suit}@${res}`;
+            let tex = faceTextureCache.get(key);
+            if (!tex) {
+                const canvas = document.createElement('canvas');
+                if (res === '2k') {
+                    canvas.width = 2048;
+                    canvas.height = 3072;
+                } else {
+                    canvas.width = 1024;
+                    canvas.height = 1536;
+                }
+                const ctx = canvas.getContext('2d');
+                const isRed = card.suit === '♥' || card.suit === '♦';
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = (res === '2k') ? 32 : 16;
+                const pad = (res === '2k') ? 64 : 32;
+                ctx.strokeRect(pad, pad, canvas.width - pad * 2, canvas.height - pad * 2);
+                ctx.fillStyle = isRed ? '#cc0000' : '#000000';
+                ctx.font = `bold ${res === '2k' ? 640 : 320}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const cx = (res === '2k') ? 512 : 256;
+                ctx.fillText(card.rank, cx, (res === '2k') ? 640 : 320);
+                ctx.fillText(card.suit, cx, (res === '2k') ? 1280 : 640);
+                tex = new THREE.CanvasTexture(canvas);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                tex.anisotropy = CARD_TEXTURE_ANISO;
+                tex.minFilter = THREE.LinearMipmapLinearFilter;
+                tex.magFilter = THREE.LinearFilter;
+                tex.generateMipmaps = true;
+                faceTextureCache.set(key, tex);
+            }
+            return new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide });
+        }
+
+        // Create 1-deck shoe
+        function create6DeckShoe() {
+            const deckData = [];
+            for (let deckNum = 0; deckNum < 1; deckNum++) {
+                for (let suit of suits) {
+                    for (let rank of ranks) {
+                        deckData.push({ suit, rank });
+                    }
+                }
+            }
+            return deckData;
+        }
+
+        // Create physical card
+        function createPhysicalCard(card, position) {
+            const cardGroup = new THREE.Group();
+            
+            const cardGeom = new THREE.BoxGeometry(CARD.width, CARD.thickness, CARD.length);
+            
+            const backMat = new THREE.MeshStandardMaterial({
+                map: cardBackTexture,
+                roughness: 0.3,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            
+            const edgeMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 0.3,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+
+            const faceMat = getFaceMaterial(card, '1k');
+            
+            const cardWithTexture = new THREE.Mesh(cardGeom, [
+                edgeMat,
+                edgeMat,
+                faceMat,
+                backMat,
+                edgeMat,
+                edgeMat
+            ]);
+            cardWithTexture.castShadow = true;
+            cardWithTexture.receiveShadow = true;
+            cardGroup.add(cardWithTexture);
+            
+            cardGroup.position.set(position.x, position.y, position.z);
+            cardGroup.rotation.x = Math.PI;
+            scene.add(cardGroup);
+            
+            const shape = new CANNON.Box(new CANNON.Vec3(CARD.width/2, CARD.thickness/2, CARD.length/2));
+            const body = new CANNON.Body({
+                mass: 0,
+                shape: shape,
+                material: physCardMaterial,
+                position: new CANNON.Vec3(position.x, position.y, position.z),
+                linearDamping: 0.5,
+                angularDamping: 0.5
+            });
+            body.quaternion.setFromEuler(Math.PI, 0, 0);
+            world.addBody(body);
+            
+            return { mesh: cardGroup, body: body };
+        }
+
+        // Initialize shoe with 312 stacked cards
+        function initializeShoe() {
+            for (let sc of shoeCards) {
+                scene.remove(sc.mesh);
+                world.removeBody(sc.body);
+            }
+            shoeCards = [];
+            
+            const deckData = create6DeckShoe();
+            const shoePos = SHOE_POS;
+            
+            for (let i = 0; i < deckData.length; i++) {
+                const yOffset = i * CARD.thickness;
+                const position = {
+                    x: shoePos.x,
+                    y: shoePos.y + yOffset,
+                    z: shoePos.z
+                };
+                
+                const physCard = createPhysicalCard(deckData[i], position);
+                shoeCards.push({
+                    card: deckData[i],
+                    mesh: physCard.mesh,
+                    body: physCard.body
+                });
+            }
+            
+            console.log('Shoe initialized with', shoeCards.length, 'cards');
+        }
+
+        // Shuffle the shoe
+        function shuffleShoe(initialLoad = false) {
+            if (isShuffling) return;
+            isShuffling = true;
+            
+            console.log('Shuffling shoe...');
+            animateCameraToShoe(st(1000));
+            
+            const shoePos = SHOE_POS;
+            const PACKET_SIZE_MIN = 3;
+            const PACKET_SIZE_MAX = 16;
+            const MOVES = 120;
+            const operations = [];
+            
+            for (let m = 0; m < MOVES; m++) {
+                const size = Math.floor(Math.random() * (PACKET_SIZE_MAX - PACKET_SIZE_MIN + 1)) + PACKET_SIZE_MIN;
+                const startIdx = Math.floor(Math.random() * Math.max(1, shoeCards.length - size));
+                let insertIdx = Math.floor(Math.random() * shoeCards.length);
+                if (insertIdx >= startIdx && insertIdx <= startIdx + size) {
+                    insertIdx = (insertIdx + size + 5) % shoeCards.length;
+                }
+                operations.push({ startIdx, size, insertIdx });
+                if (m % 15 === 14) operations.push({ cut: true });
+            }
+
+            let opIndex = 0;
+            function performNextOp() {
+                if (opIndex >= operations.length) {
+                    shoeCards.forEach((sc, idx) => {
+                        const targetY = shoePos.y + idx * CARD.thickness;
+                        addShuffleTween(sc, targetY, { duration: st(220), bump: 0.02, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.35 });
+                    });
+                    setTimeout(() => {
+                        isShuffling = false;
+                        console.log('Shuffle complete!');
+                        animateCameraBack(st(1200));
+                        // Start dealing after camera returns
+                        setTimeout(() => {
+                            dealCards();
+                        }, st(1500));
+                    }, st(260));
+                    return;
+                }
+                
+                const op = operations[opIndex++];
+                if (op.cut) {
+                    const k = Math.floor(shoeCards.length * (0.2 + Math.random()*0.3));
+                    const top = shoeCards.splice(shoeCards.length - k, k);
+                    shoeCards.unshift(...top);
+                    shoeCards.forEach((sc, idx) => {
+                        const targetY = shoePos.y + idx * CARD.thickness;
+                        addShuffleTween(sc, targetY, { duration: st(240), bump: 0.02, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.25 });
+                    });
+                } else {
+                    const packet = shoeCards.splice(op.startIdx, op.size);
+                    const clampedInsert = Math.min(op.insertIdx, shoeCards.length);
+                    shoeCards.splice(clampedInsert, 0, ...packet);
+                    packet.forEach((sc, localIdx) => {
+                        const globalIdx = clampedInsert + localIdx;
+                        const targetY = shoePos.y + globalIdx * CARD.thickness;
+                        addShuffleTween(sc, targetY, { duration: st(300), bump: 0.04, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.15 });
+                    });
+                }
+                
+                const delay = (30 + Math.random()*40) * SHUFFLE_TIME_SCALE;
+                setTimeout(performNextOp, Math.max(10, delay));
+            }
+            performNextOp();
+        }
+
+        // --- Player Positions (4 sides of square table) ---
+        // Player numbering: Player 1 at front, then clockwise: Player 4 (Right), Player 3 (Back), Player 2 (Left)
+        const PLAYER_PILE_INSET = 0.35; // Distance inward from the table edge
+        const PILE_CLEARANCE_Y = 0.01; // Lift above felt to avoid z-fighting
+        const playerPositions = [
+            { x: 0, z: TABLE_SIZE/2 - PLAYER_PILE_INSET, name: 'Player 1 (Front)' },   // Front
+            { x: TABLE_SIZE/2 - PLAYER_PILE_INSET, z: 0, name: 'Player 4 (Right)' },       // Right
+            { x: 0, z: -TABLE_SIZE/2 + PLAYER_PILE_INSET, name: 'Player 3 (Back)' },      // Back
+            { x: -TABLE_SIZE/2 + PLAYER_PILE_INSET, z: 0, name: 'Player 2 (Left)' }       // Left
+        ];
+
+        // Track cards dealt to each player
+        const playerCards = [[], [], [], []];
+
+        const HAND_FAN = {
+            lift: 0.28,
+            spread: CARD.width * 0.85,
+            forwardOffset: 0.38,
+            thicknessStep: CARD.thickness * 0.04,
+            settleLift: 0.05,
+            settleTime: 420
+        };
+
+        function getPlayerForwardXZ(pos) {
+            const len = Math.hypot(pos.x, pos.z) || 1;
+            return { x: pos.x / len, z: pos.z / len };
+        }
+
+        function getRightFromForward(forward) {
+            return { x: forward.z, z: -forward.x };
+        }
+
+
+        function fanPlayerHand(playerIndex) {
+            const cards = playerCards[playerIndex];
+            if (!cards.length) return;
+            const base = playerPositions[playerIndex];
+            const forward = getPlayerForwardXZ(base);
+            const right = getRightFromForward(forward);
+            const startOffset = -(cards.length - 1) / 2;
+
+            let baseYaw = 0;
+            let baseRotX = 0;
+            let baseRotZ = 0;
+            let axis = 'z';
+
+            if (playerIndex === 0) {
+                baseRotX = Math.PI / 2;
+                baseRotZ = 0;
+                baseYaw = 0;
+                axis = 'z';
+            } else if (playerIndex === 2) {
+                baseRotX = Math.PI / 2;
+                baseRotZ = Math.PI;
+                baseYaw = 0;
+                axis = 'z';
+            } else if (playerIndex === 1) {
+                baseRotX = Math.PI / 2;
+                baseRotZ = Math.PI / 2;
+                baseYaw = Math.PI;
+                axis = 'x';
+            } else if (playerIndex === 3) {
+                baseRotX = Math.PI / 2;
+                baseRotZ = -Math.PI / 2;
+                baseYaw = Math.PI;
+                axis = 'x';
+            }
+
+            const pivotX = base.x + forward.x * HAND_FAN.forwardOffset;
+            const pivotZ = base.z + forward.z * HAND_FAN.forwardOffset;
+            const pivotY = TABLE_Y_SHIFT + HAND_FAN.lift;
+
+            cards.forEach((card, i) => {
+                const offset = (startOffset + i) * HAND_FAN.spread;
+                let targetX = pivotX;
+                let targetY = pivotY + i * HAND_FAN.thicknessStep;
+                let targetZ = pivotZ;
+                const rotX = baseRotX;
+                const rotY = baseYaw;
+                const rotZ = baseRotZ;
+
+                if (axis === 'z') {
+                    targetX = pivotX + right.x * offset;
+                } else {
+                    targetZ = pivotZ + right.z * offset;
+                }
+
+                const fromX = card.mesh.position.x;
+                const fromZ = card.mesh.position.z;
+                const fromY = card.mesh.position.y;
+
+                addSlideTween(
+                    card,
+                    fromX,
+                    fromZ,
+                    targetX,
+                    targetZ,
+                    fromY,
+                    targetY,
+                    st(HAND_FAN.settleTime),
+                    {
+                        toRotY: rotY,
+                        rotStart: 0,
+                        rotEnd: 1,
+                        rotX,
+                        rotZ,
+                        lift: HAND_FAN.settleLift,
+                        useMesh: true
+                    }
+                );
+            });
+        }
+
+        function fanAllHands() {
+            for (let i = 0; i < playerCards.length; i++) {
+                fanPlayerHand(i);
+            }
+        }
+
+        // Deal cards one at a time, clockwise, face down in piles
+        function dealCards() {
+            console.log('Starting card deal... Total cards:', shoeCards.length);
+            const TOTAL_CARDS = shoeCards.length;
+            let cardIndex = TOTAL_CARDS - 1; // Start from TOP of deck (highest index)
+            let cardDealtCount = 0;
+            
+            // Reset player cards for this round
+            playerCards[0] = [];
+            playerCards[1] = [];
+            playerCards[2] = [];
+            playerCards[3] = [];
+
+            function dealNextCard() {
+                if (cardDealtCount >= TOTAL_CARDS) {
+                    console.log('All cards dealt! Total:', cardDealtCount);
+                    setTimeout(() => {
+                        fanAllHands();
+                    }, st(500));
+                    return;
+                }
+
+                if (!shoeCards[cardIndex]) {
+                    console.error('Card at index', cardIndex, 'is undefined. cardDealtCount:', cardDealtCount);
+                    return;
+                }
+
+                const card = shoeCards[cardIndex];
+                // Clockwise order starting from back (player position): Back->Right->Front->Left
+                const actualPlayerIndex = ((2 - cardDealtCount) % 4 + 4) % 4;
+                const targetPosition = playerPositions[actualPlayerIndex];
+                const cardCount = playerCards[actualPlayerIndex].length;
+
+                // Place at player position with slight offset for pile stacking
+                const targetX = targetPosition.x + (Math.random() - 0.5) * 0.15;
+                const targetZ = targetPosition.z + (Math.random() - 0.5) * 0.15;
+                const targetY = TABLE_Y_SHIFT + CARD.thickness/2 + PILE_CLEARANCE_Y + cardCount * CARD.thickness * 0.08;
+                const targetRotY = Math.atan2(targetPosition.x, targetPosition.z);
+
+                // Store original position
+                const fromX = card.mesh.position.x;
+                const fromZ = card.mesh.position.z;
+                const fromY = card.mesh.position.y;
+
+                console.log('Dealing card', cardDealtCount, 'to', playerPositions[actualPlayerIndex].name, 'from cardIndex', cardIndex);
+
+                // Temporarily remove card from physics to avoid collisions during dealing
+                world.removeBody(card.body);
+
+                // Animate card from deck to player pile using custom tween system
+                addSlideTween(
+                    card,
+                    fromX,
+                    fromZ,
+                    targetX,
+                    targetZ,
+                    fromY,
+                    targetY,
+                    st(450),
+                    { toRotY: targetRotY, rotStart: 0.45, rotEnd: 1, lift: 0.12, useMesh: true }
+                );
+
+                playerCards[actualPlayerIndex].push(card);
+                cardIndex--; // Move to next card from top
+                cardDealtCount++;
+
+                // Deal next card after short delay
+                const timeoutId = setTimeout(() => {
+                    try {
+                        dealNextCard();
+                    } catch (err) {
+                        console.error('Error in dealNextCard:', err);
+                    }
+                }, st(120));
+            }
+
+            dealNextCard();
+        }
+
+        // --- GUI ---
+        const gui = new GUI();
+        
+        const cameraFolder = gui.addFolder('Camera');
+        cameraFolder.add(camera.position, 'x', -20, 20, 0.1).name('Camera X');
+        cameraFolder.add(camera.position, 'y', 2, 20, 0.1).name('Camera Y');
+        cameraFolder.add(camera.position, 'z', -20, 20, 0.1).name('Camera Z');
+        
+        const debugFolder = gui.addFolder('Debug');
+        debugFolder.add(debugState, 'showCannonWireframes').name('Cannon Wireframes');
+        debugFolder.add(debugState, 'showVisualWireframes').name('Visual Wireframe Mode');
+        
+        const roomSettings = {
+            showDebug: false,
+            ambientIntensity: ambientLight.intensity,
+            ceilingLightIntensity: mainCeilingLight.intensity,
+            bulbGlow: lightBulb.material.emissiveIntensity
+        };
+        const roomFolder = gui.addFolder('Room');
+        roomFolder.add(roomSettings, 'showDebug').name('Show Debug Grid/Axes').onChange((v)=>{
+            axes.visible = v;
+            grid.visible = v;
+        });
+        roomFolder.add(roomSettings, 'ambientIntensity', 0, 2, 0.01).name('Ambient Intensity').onChange((v)=>{
+            ambientLight.intensity = v;
+        });
+        roomFolder.add(roomSettings, 'ceilingLightIntensity', 0, 15, 0.1).name('Ceiling Light Intensity').onChange((v)=>{
+            mainCeilingLight.intensity = v;
+        });
+        roomFolder.add(roomSettings, 'bulbGlow', 0, 8, 0.1).name('Bulb Glow').onChange((v)=>{
+            lightBulb.material.emissiveIntensity = v;
+        });
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const timeNow = performance.now();
+            
+            world.step(1/60);
+            updateCameraAnimation(timeNow);
+            updateShuffleTweens(timeNow);
+            
+            for (let sc of shoeCards) {
+                if (!sc.body || !sc.body.world) continue;
+                sc.mesh.position.copy(sc.body.position);
+                sc.mesh.quaternion.copy(sc.body.quaternion);
+            }
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- Resize Handler ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start
+        animate();
+        setTimeout(() => {
+            initializeShoe();
+            setTimeout(() => {
+                shuffleShoe(true);
+            }, st(600));
+        }, 0);
+    </script>
+</body>
+</html>
