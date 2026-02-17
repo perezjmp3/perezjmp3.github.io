@@ -164,11 +164,11 @@
 <body>
     <div id="mode-selector-modal" class="modal-overlay">
         <div class="modal-content">
-            <h2>Select Game Mode</h2>
-            <p>Choose how you want to play:</p>
+            <h2>Game Mode</h2>
+            <p>...</p>
             <div class="modal-buttons">
                 <button class="modal-button debug" onclick="selectGameMode('debug')">Debug Mode<br><small style="font-weight: normal;">Control all players</small></button>
-                <button class="modal-button ai" onclick="selectGameMode('ai')">AI Mode<br><small style="font-weight: normal;">Play against AI</small></button>
+                <button class="modal-button ai" onclick="selectGameMode('ai')">Standard<br><small style="font-weight: normal;">Play against AI</small></button>
             </div>
         </div>
     </div>
@@ -180,7 +180,7 @@
 
     <div class="game-info">
         <h3>VC Card Game</h3>
-        <div id="game-status" style="margin-top: 10px; font-style: italic;">Foundation - Shoe initialized and ready</div>
+        <div id="game-status" style="margin-top: 10px; font-style: italic;">Foundation - Deck initialized and ready</div>
         <div id="move-history" class="move-history"></div>
     </div>
 
@@ -1403,7 +1403,7 @@
         const PLAYER_PILE_INSET = 0.35; // Distance inward from the table edge
         const PILE_CLEARANCE_Y = 0.01; // Lift above felt to avoid z-fighting
         const playerPositions = [
-            { x: 0, z: TABLE_SIZE/2 - PLAYER_PILE_INSET, name: 'Player 1 (Front)' },   // Front
+            { x: 0, z: TABLE_SIZE/2 - PLAYER_PILE_INSET, name: 'Player 1' },   // Front
             { x: TABLE_SIZE/2 - PLAYER_PILE_INSET, z: 0, name: 'Player 4 (Right)' },       // Right
             { x: 0, z: -TABLE_SIZE/2 + PLAYER_PILE_INSET, name: 'Player 3 (Back)' },      // Back
             { x: -TABLE_SIZE/2 + PLAYER_PILE_INSET, z: 0, name: 'Player 2 (Left)' }       // Left
