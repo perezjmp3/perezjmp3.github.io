@@ -40,10 +40,11 @@
         .btn {
             display: inline-block;
             padding: 10px 14px;
-            border: 1px solid rgba(255,255,255,0.3);
+            border: none;
             border-radius: 10px;
             backdrop-filter: blur(5px);
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.25);
+            color: white;
         }
 
         .game-info {
@@ -64,9 +65,113 @@
             margin: 0 0 10px 0;
             font-size: 18px;
         }
+
+        .move-history {
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.4;
+            opacity: 0.85;
+        }
+
+        .move-line {
+            white-space: nowrap;
+        }
+
+        .game-info .btn {
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        .action-bar {
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 400px;
+            border: 2px solid #4a4a4a;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            color: #ffffff;
+            font-size: 24px;
+        }
+
+        .modal-content p {
+            color: #cccccc;
+            margin: 15px 0 25px 0;
+            line-height: 1.5;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .modal-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+
+        .modal-button.debug {
+            background: #ff9800;
+            color: #000;
+        }
+
+        .modal-button.debug:hover {
+            background: #ffb74d;
+        }
+
+        .modal-button.ai {
+            background: #4caf50;
+            color: #fff;
+        }
+
+        .modal-button.ai:hover {
+            background: #66bb6a;
+        }
     </style>
 </head>
 <body>
+    <div id="mode-selector-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Select Game Mode</h2>
+            <p>Choose how you want to play:</p>
+            <div class="modal-buttons">
+                <button class="modal-button debug" onclick="selectGameMode('debug')">Debug Mode<br><small style="font-weight: normal;">Control all players</small></button>
+                <button class="modal-button ai" onclick="selectGameMode('ai')">AI Mode<br><small style="font-weight: normal;">Play against AI</small></button>
+            </div>
+        </div>
+    </div>
     <nav>
         <a href="./index.html">Home</a>
         <a href="./projects.html">Projects</a>
@@ -75,7 +180,14 @@
 
     <div class="game-info">
         <h3>VC Card Game</h3>
-        <div style="margin-top: 10px; font-style: italic;">Foundation - Shoe initialized and ready</div>
+        <div id="game-status" style="margin-top: 10px; font-style: italic;">Foundation - Shoe initialized and ready</div>
+        <div id="move-history" class="move-history"></div>
+    </div>
+
+    <div class="action-bar">
+        <button id="sort-hand" class="btn" type="button">Organize Hand</button>
+        <button id="play-hand" class="btn" type="button">Play</button>
+        <button id="pass-hand" class="btn" type="button">Pass</button>
     </div>
 
     <canvas id="c"></canvas>
@@ -112,6 +224,7 @@
             width: CARD_REAL.width / UNIT_IN_METERS,
             thickness: Math.max(CARD_REAL.thickness / UNIT_IN_METERS, 0.0015)
         };
+        const CARD_MASS = 0.02;
 
         // Global vertical adjustment - table raised close to shoe with small gap to avoid z-fighting
         const TABLE_Y_SHIFT = 0.04;
@@ -150,8 +263,43 @@
         controls.maxDistance = 20;
         controls.maxPolarAngle = Math.PI / 2.1;
 
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0, 0);
+        const hoverState = new Map();
+        const selectState = new Map();
+        const aiHoverState = new Map();
+        const aiSelectState = new Map();
+        const aiSelectedByPlayer = new Map();
+        const aiHoverByPlayer = new Map();
+        const hoverForward = new THREE.Vector3();
+        let hoveredCard = null;
+        const HOVER_LIFT = CARD.thickness * 48;
+        const HOVER_LERP = 0.18;
+        const SELECT_LIFT = CARD.thickness * 64;
+        const SELECT_LERP = 0.16;
+        const AI_HOVER_LIFT = CARD.thickness * 24;
+        const AI_SELECT_LIFT = CARD.thickness * 64;
+        const AI_HOVER_LERP = 0.12;
+        const AI_SELECT_LERP = 0.14;
+        const selectedCards = new Set();
+
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        });
+
+        renderer.domElement.addEventListener('pointerleave', () => {
+            hoveredCard = null;
+        });
+
+        renderer.domElement.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0) return;
+            handleCardSelection(event);
+        });
+
         // --- Lighting ---
-        const ambientLight = new THREE.AmbientLight(0xfff4e6, 0.5);
+        const ambientLight = new THREE.AmbientLight(0xfff4e6, 1.1);
         scene.add(ambientLight);
 
         // Debug helpers
@@ -165,7 +313,7 @@
         grid.visible = false;
         scene.add(grid);
 
-        // --- Man Cave Room (same as blackjack) ---
+        // --- Man Cave Room ---
         const roomGroup = new THREE.Group();
         
         const ROOM = {
@@ -447,13 +595,13 @@
         const physCardMaterial = new CANNON.Material('card');
         
         const tableCardContact = new CANNON.ContactMaterial(physTableMaterial, physCardMaterial, {
-            friction: 0.6,
+            friction: 1.3,
             restitution: 0.1
         });
         world.addContactMaterial(tableCardContact);
         
         const cardCardContact = new CANNON.ContactMaterial(physCardMaterial, physCardMaterial, {
-            friction: 0.5,
+            friction: 1.1,
             restitution: 0.0
         });
         world.addContactMaterial(cardCardContact);
@@ -571,6 +719,13 @@
         }
         function setCardQuaternion(targetQuat, rotX, rotY, rotZ) {
             targetQuat.setFromEuler(new THREE.Euler(rotX, rotY, rotZ, 'YXZ'));
+        }
+
+        function setMeshBasePosition(mesh) {
+            if (!mesh.userData.basePos) {
+                mesh.userData.basePos = new THREE.Vector3();
+            }
+            mesh.userData.basePos.copy(mesh.position);
         }
 
         let cameraAnimation = null;
@@ -694,6 +849,8 @@
             const rotX = options.rotX ?? Math.PI;
             const rotZ = options.rotZ ?? 0;
             const lift = options.lift ?? 0;
+            const toQuat = options.toQuat ?? null;
+            const fromQuat = toQuat ? (useMesh ? sc.mesh.quaternion.clone() : sc.body.quaternion.clone()) : null;
             activeTweens.push({
                 sc,
                 slide: true,
@@ -710,6 +867,8 @@
                 rotEnd,
                 rotX,
                 rotZ,
+                fromQuat,
+                toQuat,
                 useMesh,
                 duration,
                 start: startTime
@@ -731,14 +890,28 @@
                     const y = twn.fromY + (twn.toY - twn.fromY) * e + Math.sin(Math.PI * tt) * twn.lift;
                     const rotT = clamp01((tt - twn.rotStart) / Math.max(0.0001, twn.rotEnd - twn.rotStart));
                     const rotY = lerpAngle(twn.fromRotY, twn.toRotY, easeInOutQuad(rotT));
+                    let quat = null;
+                    if (twn.toQuat && twn.fromQuat) {
+                        quat = twn.fromQuat.clone().slerp(twn.toQuat, easeInOutQuad(rotT));
+                    }
                     if (twn.useMesh) {
                         twn.sc.mesh.position.set(x, y, z);
-                        setCardQuaternion(twn.sc.mesh.quaternion, twn.rotX, rotY, twn.rotZ);
+                        if (quat) {
+                            twn.sc.mesh.quaternion.copy(quat);
+                        } else {
+                            setCardQuaternion(twn.sc.mesh.quaternion, twn.rotX, rotY, twn.rotZ);
+                        }
+                        setMeshBasePosition(twn.sc.mesh);
                     } else {
                         twn.sc.body.position.set(x, y, z);
-                        setCardQuaternion(twn.sc.body.quaternion, twn.rotX, rotY, twn.rotZ);
+                        if (quat) {
+                            twn.sc.body.quaternion.copy(quat);
+                        } else {
+                            setCardQuaternion(twn.sc.body.quaternion, twn.rotX, rotY, twn.rotZ);
+                        }
                         twn.sc.mesh.position.copy(twn.sc.body.position);
                         twn.sc.mesh.quaternion.copy(twn.sc.body.quaternion);
+                        setMeshBasePosition(twn.sc.mesh);
                     }
                     if (tt >= 1) {
                         activeTweens.splice(i, 1);
@@ -761,6 +934,7 @@
                 }
                 twn.sc.body.position.set(x, y, z);
                 twn.sc.mesh.position.copy(twn.sc.body.position);
+                setMeshBasePosition(twn.sc.mesh);
                 if (tt >= 1) {
                     activeTweens.splice(i, 1);
                 }
@@ -769,8 +943,33 @@
 
         const debugState = {
             showCannonWireframes: false,
-            showVisualWireframes: false
+            showVisualWireframes: false,
+            showArcLine: false
         };
+
+        let arcDebugLines = [];
+        function setArcDebugLinesVisible(enabled, playerIndex = null) {
+            arcDebugLines.forEach((line) => scene.remove(line));
+            arcDebugLines = [];
+            if (!enabled) return;
+            
+            // If playerIndex is provided, show only that player's arc
+            // Otherwise show all arcs (legacy behavior)
+            if (playerIndex !== null) {
+                const line = drawDebugArcLine(playerIndex);
+                if (line) arcDebugLines.push(line);
+                const tableLine = drawTableArcLine(13, playerIndex);
+                if (tableLine) arcDebugLines.push(tableLine);
+            } else {
+                for (let i = 0; i < 4; i++) {
+                    const line = drawDebugArcLine(i);
+                    if (line) arcDebugLines.push(line);
+                }
+                // When showing all arcs, show table arc for player 0 (default)
+                const tableLine = drawTableArcLine(13, 0);
+                if (tableLine) arcDebugLines.push(tableLine);
+            }
+        }
 
         // --- Square Table ---
         const TABLE_SIZE = 4.5; // Smaller square table
@@ -797,6 +996,15 @@
             position: new CANNON.Vec3(0, -TABLE_THICKNESS/2 + TABLE_Y_SHIFT, 0)
         });
         world.addBody(tableBody);
+
+        // Invisible physics-only surface slightly above the visible table
+        const feltBody = new CANNON.Body({
+            mass: 0,
+            shape: tableShape,
+            material: physTableMaterial,
+            position: new CANNON.Vec3(0, -TABLE_THICKNESS/2 + TABLE_Y_SHIFT + CARD.thickness, 0)
+        });
+        world.addBody(feltBody);
 
         // Table rail (border)
         const RAIL_HEIGHT = 0.156;
@@ -862,16 +1070,23 @@
 
         // --- Card Shoe (Cards only, no structure) ---
         const SHOE_WIDTH = CARD.width * 1.3;
-        const SHOE_HEIGHT = CARD.thickness * 312 * 1.5;
+        const SHOE_HEIGHT = CARD.thickness * 52 * 1.5;
         const SHOE_DEPTH = CARD.length * 1.2;
         const SHOE_POS = { x: 0, y: TABLE_Y_SHIFT + CARD.thickness/2, z: 0 };
 
         // --- Card Deck and Shoe State ---
         const suits = ['♠', '♥', '♦', '♣'];
         const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+        const rankOrder = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'];
+        const suitOrder = ['♠', '♣', '♦', '♥'];
+        const rankValue = new Map(rankOrder.map((rank, index) => [rank, index]));
+        const suitValue = new Map(suitOrder.map((suit, index) => [suit, index]));
         
         let shoeCards = [];
+        let shoeStackSlots = [];
         let isShuffling = false;
+        let gameMode = null; // 'debug' or 'ai'
 
         // Create card back texture
         function createCardBackTexture() {
@@ -1004,8 +1219,8 @@
             return new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide });
         }
 
-        // Create 1-deck shoe
-        function create6DeckShoe() {
+        // Create single-deck shoe
+        function createSingleDeckShoe() {
             const deckData = [];
             for (let deckNum = 0; deckNum < 1; deckNum++) {
                 for (let suit of suits) {
@@ -1070,7 +1285,7 @@
             return { mesh: cardGroup, body: body };
         }
 
-        // Initialize shoe with 312 stacked cards
+        // Initialize shoe with 52 stacked cards
         function initializeShoe() {
             for (let sc of shoeCards) {
                 scene.remove(sc.mesh);
@@ -1078,7 +1293,7 @@
             }
             shoeCards = [];
             
-            const deckData = create6DeckShoe();
+            const deckData = createSingleDeckShoe();
             const shoePos = SHOE_POS;
             
             for (let i = 0; i < deckData.length; i++) {
@@ -1090,14 +1305,26 @@
                 };
                 
                 const physCard = createPhysicalCard(deckData[i], position);
-                shoeCards.push({
+                const sc = {
                     card: deckData[i],
                     mesh: physCard.mesh,
                     body: physCard.body
-                });
+                };
+                sc.mesh.userData.cardRef = sc;
+                setMeshBasePosition(sc.mesh);
+                shoeCards.push(sc);
             }
             
             console.log('Shoe initialized with', shoeCards.length, 'cards');
+        }
+
+        function captureShoeStackSlots() {
+            const shoePos = SHOE_POS;
+            shoeStackSlots = shoeCards.map((_, idx) => ({
+                x: shoePos.x,
+                y: shoePos.y + idx * CARD.thickness,
+                z: shoePos.z
+            }));
         }
 
         // Shuffle the shoe
@@ -1132,6 +1359,7 @@
                         const targetY = shoePos.y + idx * CARD.thickness;
                         addShuffleTween(sc, targetY, { duration: st(220), bump: 0.02, centerX: shoePos.x, centerZ: shoePos.z, centerLerp: 0.35 });
                     });
+                    captureShoeStackSlots();
                     setTimeout(() => {
                         isShuffling = false;
                         console.log('Shuffle complete!');
@@ -1184,11 +1412,1391 @@
         // Track cards dealt to each player
         const playerCards = [[], [], [], []];
 
+        function sortPlayerHand(playerIndex) {
+            const cards = playerCards[playerIndex];
+            if (!cards.length) return;
+            cards.sort((a, b) => {
+                const rankA = rankValue.get(a.card.rank) ?? 0;
+                const rankB = rankValue.get(b.card.rank) ?? 0;
+                if (rankA !== rankB) return rankA - rankB;
+                const suitA = suitValue.get(a.card.suit) ?? 0;
+                const suitB = suitValue.get(b.card.suit) ?? 0;
+                return suitA - suitB;
+            });
+            fanPlayerHand(playerIndex);
+        }
+
+        const statusEl = document.getElementById('game-status');
+        const moveHistoryEl = document.getElementById('move-history');
+        const gameState = {
+            currentPlayer: 0,
+            leadPlayer: 0,
+            lastPlayed: null,
+            trick: null,
+            trickPlayersCount: null,
+            passed: new Set(),
+            round: 1,
+            mustInclude3S: true,
+            aiPending: false
+        };
+        const lastMoves = Array(playerCards.length).fill('—');
+        const playerPlacements = Array(playerCards.length).fill(null);
+        const finishOrder = [];
+
+        const TRICK_POS = { x: 0, z: 0, y: TABLE_Y_SHIFT + CARD.thickness / 2 + 0.02 + PILE_CLEARANCE_Y };
+        const DISCARD_POS = { x: -TABLE_SIZE / 2 - 0.8, z: 0, y: TABLE_Y_SHIFT + CARD.thickness / 2 + 0.02 + PILE_CLEARANCE_Y };
+        let currentHandCards = [];
+        let playStackCounter = 0;
+
+        function setStatus(text) {
+            if (statusEl) statusEl.textContent = text;
+        }
+
+        function getPlayerLabel(index) {
+            return playerPositions[index]?.name ?? `Player ${index + 1}`;
+        }
+
+        function formatCard(sc) {
+            return `${sc.card.rank}${sc.card.suit}`;
+        }
+
+        function getHighestCard(cards) {
+            return [...cards].sort((a, b) => {
+                const ra = getCardRankValue(a.card);
+                const rb = getCardRankValue(b.card);
+                if (ra !== rb) return rb - ra;
+                return getCardSuitValue(a.card) - getCardSuitValue(b.card);
+            })[0];
+        }
+
+        function renderMoveHistory() {
+            if (!moveHistoryEl) return;
+            moveHistoryEl.innerHTML = playerPositions
+                .map((p, i) => `<div class="move-line">${p.name}: ${lastMoves[i]}</div>`)
+                .join('');
+        }
+
+        function recordPlayerMove(playerIndex, text) {
+            if (playerPlacements[playerIndex] !== null) return;
+            lastMoves[playerIndex] = text;
+            renderMoveHistory();
+        }
+
+        function formatPlacement(place) {
+            if (place === 1) return '1st';
+            if (place === 2) return '2nd';
+            if (place === 3) return '3rd';
+            return `${place}th`;
+        }
+
+        function markPlayerFinished(playerIndex, moveLabel) {
+            if (playerPlacements[playerIndex] !== null) return;
+            const placement = finishOrder.length + 1;
+            finishOrder.push(playerIndex);
+            playerPlacements[playerIndex] = placement;
+            lastMoves[playerIndex] = `${moveLabel} - ${formatPlacement(placement)} place`;
+            renderMoveHistory();
+        }
+
+        function resetPlacementsForNewGame() {
+            for (let i = 0; i < playerPlacements.length; i++) {
+                playerPlacements[i] = null;
+            }
+            finishOrder.length = 0;
+            for (let i = 0; i < lastMoves.length; i++) {
+                lastMoves[i] = '—';
+            }
+            renderMoveHistory();
+        }
+
+        function getCardRankValue(card) {
+            return rankValue.get(card.rank) ?? 0;
+        }
+
+        function getCardSuitValue(card) {
+            return suitValue.get(card.suit) ?? 0;
+        }
+
+        function isThreeOfSpades(sc) {
+            return sc.card.rank === '3' && sc.card.suit === '♠';
+        }
+
+        function isConsecutive(rankValues) {
+            for (let i = 1; i < rankValues.length; i++) {
+                if (rankValues[i] !== rankValues[i - 1] + 1) return false;
+            }
+            return true;
+        }
+
+        function getHighestSuitValue(cardsForRank) {
+            return Math.max(...cardsForRank.map((sc) => getCardSuitValue(sc.card)));
+        }
+
+        function evaluatePattern(cards) {
+            if (!cards.length) return null;
+            const sorted = [...cards].sort((a, b) => {
+                const ra = getCardRankValue(a.card);
+                const rb = getCardRankValue(b.card);
+                if (ra !== rb) return ra - rb;
+                return getCardSuitValue(a.card) - getCardSuitValue(b.card);
+            });
+
+            const ranksMap = new Map();
+            for (const sc of sorted) {
+                const rv = getCardRankValue(sc.card);
+                if (!ranksMap.has(rv)) ranksMap.set(rv, []);
+                ranksMap.get(rv).push(sc);
+            }
+            const rankValues = Array.from(ranksMap.keys()).sort((a, b) => a - b);
+            const counts = rankValues.map((rv) => ranksMap.get(rv).length);
+
+            if (sorted.length === 1) {
+                const rv = rankValues[0];
+                return {
+                    type: 'single',
+                    cardCount: 1,
+                    rankHigh: rv,
+                    suitHigh: getHighestSuitValue(ranksMap.get(rv))
+                };
+            }
+
+            if (rankValues.length === 1) {
+                const rv = rankValues[0];
+                if (sorted.length === 2) {
+                    return { type: 'pair', cardCount: 2, rankHigh: rv, suitHigh: getHighestSuitValue(ranksMap.get(rv)) };
+                }
+                if (sorted.length === 3) {
+                    return { type: 'triple', cardCount: 3, rankHigh: rv, suitHigh: getHighestSuitValue(ranksMap.get(rv)) };
+                }
+                if (sorted.length === 4) {
+                    return { type: 'four', cardCount: 4, rankHigh: rv, suitHigh: getHighestSuitValue(ranksMap.get(rv)) };
+                }
+                return null;
+            }
+
+            if (rankValues.length === sorted.length && sorted.length >= 3 && isConsecutive(rankValues)) {
+                const rv = rankValues[rankValues.length - 1];
+                return {
+                    type: 'straight',
+                    cardCount: sorted.length,
+                    rankHigh: rv,
+                    suitHigh: getHighestSuitValue(ranksMap.get(rv))
+                };
+            }
+
+            const groupSize = counts[0];
+            if ((groupSize === 2 || groupSize === 3)
+                && counts.every((c) => c === groupSize)
+                && rankValues.length >= 3
+                && isConsecutive(rankValues)) {
+                const rv = rankValues[rankValues.length - 1];
+                return {
+                    type: groupSize === 2 ? 'double-straight' : 'triple-straight',
+                    cardCount: sorted.length,
+                    rankHigh: rv,
+                    suitHigh: getHighestSuitValue(ranksMap.get(rv))
+                };
+            }
+
+            return null;
+        }
+
+        function comparePatterns(a, b) {
+            if (!a || !b) return null;
+            if (a.type !== b.type || a.cardCount !== b.cardCount) return null;
+            if (a.rankHigh !== b.rankHigh) return a.rankHigh - b.rankHigh;
+            if (a.suitHigh !== b.suitHigh) return a.suitHigh - b.suitHigh;
+            return 0;
+        }
+
+        function describePattern(pattern) {
+            if (!pattern) return 'Open hand';
+            const labels = {
+                single: 'Single',
+                pair: 'Pair',
+                triple: 'Triple',
+                four: '4-of-a-kind (Chop)',
+                straight: 'Straight',
+                'double-straight': 'Double Straight',
+                'triple-straight': 'Triple Straight'
+            };
+            // Special label for 6-card double-straight (3-pair chop that beats a 2)
+            if (pattern.type === 'double-straight' && pattern.cardCount === 6) {
+                return 'Double 3-Card Straight (Chop)';
+            }
+            return `${labels[pattern.type] ?? pattern.type} (${pattern.cardCount})`;
+        }
+
+        function canPlayPattern(pattern, trick) {
+            if (!trick) return true;
+            const twoRank = rankValue.get('2');
+            
+            // Special chop logic: beating a single 2
+            if (trick.type === 'single' && trick.rankHigh === twoRank) {
+                // Can beat with: higher 2 (by suit: ♥ > ♦ > ♣ > ♠), 4-of-a-kind, or 6-card double-straight (3-pair chop)
+                if (pattern.type === 'single' && pattern.rankHigh === twoRank) {
+                    // Both are 2s - compare by suit value
+                    const cmp = comparePatterns(pattern, trick);
+                    return cmp !== null && cmp > 0;
+                }
+                if (pattern.type === 'four') return true;  // Any 4-of-a-kind (first chop)
+                if (pattern.type === 'double-straight' && pattern.cardCount === 6) return true;  // 3-pair chop
+                return false;
+            }
+            
+            // Special logic: beating a 4-of-a-kind chop (can only be beaten by higher 4OAK)
+            if (trick.type === 'four') {
+                if (pattern.type !== 'four') return false;
+                const cmp = comparePatterns(pattern, trick);
+                return cmp !== null && cmp > 0;
+            }
+            
+            // Special logic: beating a 6-card double-straight (3-pair) chop (can only be beaten by higher 3-pair)
+            if (trick.type === 'double-straight' && trick.cardCount === 6) {
+                if (pattern.type !== 'double-straight' || pattern.cardCount !== 6) return false;
+                const cmp = comparePatterns(pattern, trick);
+                return cmp !== null && cmp > 0;
+            }
+            
+            // Normal pattern comparison
+            const cmp = comparePatterns(pattern, trick);
+            return cmp !== null && cmp > 0;
+        }
+
+        function updateTurnStatus() {
+            const trickText = describePattern(gameState.trick);
+            const requireText = gameState.mustInclude3S ? 'Must include 3♠' : '';
+            const line = `${getPlayerLabel(gameState.currentPlayer)} turn — ${trickText}${requireText ? ` — ${requireText}` : ''}`;
+            setStatus(line);
+            updateActionButtons();
+            maybeAutoPlay();
+        }
+
+        function updateActionButtons() {
+            // In debug mode, allow human to control all players
+            const isPlayerTurn = gameMode === 'debug' ? true : (gameState.currentPlayer === 0);
+            playButton.disabled = !isPlayerTurn;
+            passButton.disabled = !isPlayerTurn;
+        }
+
+        function getLowestSingle(hand) {
+            const sorted = [...hand].sort((a, b) => {
+                const ra = getCardRankValue(a.card);
+                const rb = getCardRankValue(b.card);
+                if (ra !== rb) return ra - rb;
+                return getCardSuitValue(a.card) - getCardSuitValue(b.card);
+            });
+            return sorted[0] ?? null;
+        }
+
+        // Strategic helper: Check if AI can play out all remaining cards after winning this trick
+        function canWinAfterTakingControl(hand) {
+            if (hand.length === 0) return true;
+            if (hand.length === 1) return true; // Single card always playable when you have control
+            
+            // Check for valid patterns in remaining hand
+            const pattern = evaluatePattern(hand);
+            if (pattern) return true; // All cards form one valid pattern
+            
+            // Check if we can split into 2 valid plays
+            if (hand.length <= 6) {
+                for (let splitPoint = 1; splitPoint < hand.length; splitPoint++) {
+                    const first = hand.slice(0, splitPoint);
+                    const second = hand.slice(splitPoint);
+                    const p1 = evaluatePattern(first);
+                    const p2 = evaluatePattern(second);
+                    if (p1 && p2) return true;
+                }
+            }
+            
+            // If we have 3 or fewer cards that include singles, likely can win
+            if (hand.length <= 3) return true;
+            
+            return false;
+        }
+
+        // Strategic helper: Check if we have control (highest remaining card for a given type)
+        function hasControl(hand, trick) {
+            if (!trick) return true; // No trick means we lead
+            
+            const twoRank = rankValue.get('2');
+            const aceRank = rankValue.get('A');
+            
+            // Check if we have any 2s (always gives control for singles)
+            const has2s = hand.some(sc => getCardRankValue(sc.card) === twoRank);
+            if (has2s && trick.type === 'single') return true;
+            
+            // Check if we have four-of-a-kind (beats single 2)
+            if (trick.type === 'single' && trick.rankHigh === twoRank) {
+                const buckets = getRankBuckets(hand);
+                for (const bucket of buckets.values()) {
+                    if (bucket.length >= 4) return true;
+                }
+            }
+            
+            // For pairs/triples, check if we have 2s in that quantity
+            if (trick.type === 'pair' || trick.type === 'triple') {
+                const buckets = getRankBuckets(hand);
+                const twoBucket = buckets.get(twoRank);
+                const neededCount = trick.type === 'pair' ? 2 : 3;
+                if (twoBucket && twoBucket.length >= neededCount) return true;
+            }
+            
+            return false; // Conservative: assume we don't have control
+        }
+
+        // Strategic helper: Count "poison" cards (singles that don't fit any pattern)
+        function countPoisonCards(hand) {
+            if (hand.length <= 1) return 0;
+            
+            const buckets = getRankBuckets(hand);
+            let poisonCount = 0;
+            
+            for (const [rank, cards] of buckets) {
+                if (cards.length === 1) {
+                    // This is a singleton - check if it fits a straight
+                    const rankSet = getRankSet(hand);
+                    if (!cardInStraightPotential(cards[0], rankSet)) {
+                        poisonCount++;
+                    }
+                }
+            }
+            
+            return poisonCount;
+        }
+
+        function getBestStartingPlay(hand) {
+            // Try to find the best pattern to start with
+            // CRITICAL: Never waste high-value cards (2s, Aces, Kings) on starting plays
+            // Priority: straights > groups (pairs/triples) > singles
+            // Use lowest possible ranks to save high cards for later
+            
+            const buckets = getRankBuckets(hand);
+            const rankValues = Array.from(buckets.keys()).sort((a, b) => a - b);
+            const rankSet = getRankSet(hand);
+            
+            // Define high-value ranks that should be saved (2, A, K, Q)
+            const twoRank = rankValue.get('2');
+            const aceRank = rankValue.get('A');
+            const kingRank = rankValue.get('K');
+            const queenRank = rankValue.get('Q');
+            const highValueRanks = new Set([twoRank, aceRank, kingRank, queenRank]);
+            
+            // Helper to check if play uses too many high-value cards
+            const countsHighCards = (cards) => {
+                return cards.filter(sc => highValueRanks.has(getCardRankValue(sc.card))).length;
+            };
+            
+            // Try to find straights (3+ consecutive ranks with singles)
+            // Avoid straights that include multiple high cards
+            for (let length = 5; length >= 3; length--) {
+                for (let i = 0; i <= rankValues.length - length; i++) {
+                    const startRank = rankValues[i];
+                    let consecutive = true;
+                    const cards = [];
+                    
+                    for (let j = 0; j < length; j++) {
+                        const targetRank = startRank + j;
+                        if (!rankSet.has(targetRank)) {
+                            consecutive = false;
+                            break;
+                        }
+                        const bucket = buckets.get(targetRank);
+                        if (!bucket || bucket.length === 0) {
+                            consecutive = false;
+                            break;
+                        }
+                        cards.push(bucket[0]); // Use lowest suit
+                    }
+                    
+                    if (consecutive && cards.length === length) {
+                        // Skip if it contains too many high cards (more than 1)
+                        if (countsHighCards(cards) > 1) continue;
+                        
+                        const pattern = evaluatePattern(cards);
+                        if (pattern && pattern.type === 'straight') {
+                            return cards;
+                        }
+                    }
+                }
+            }
+            
+            // Try to find double straights (3+ consecutive ranks with pairs)
+            // Avoid those with high cards
+            for (let length = 3; length >= 3; length--) {
+                for (let i = 0; i <= rankValues.length - length; i++) {
+                    const startRank = rankValues[i];
+                    let consecutive = true;
+                    const cards = [];
+                    
+                    for (let j = 0; j < length; j++) {
+                        const targetRank = startRank + j;
+                        const bucket = buckets.get(targetRank);
+                        if (!bucket || bucket.length < 2) {
+                            consecutive = false;
+                            break;
+                        }
+                        cards.push(...bucket.slice(0, 2)); // Use lowest 2 suits
+                    }
+                    
+                    if (consecutive && cards.length === length * 2) {
+                        // Skip if it contains high cards
+                        if (countsHighCards(cards) > 0) continue;
+                        
+                        const pattern = evaluatePattern(cards);
+                        if (pattern && pattern.type === 'double-straight') {
+                            return cards;
+                        }
+                    }
+                }
+            }
+            
+            // Try to find triples - BUT NEVER USE HIGH-VALUE TRIPLES TO START
+            // Playing triple 2s, Aces, Kings, or Queens to start is a massive waste
+            for (const rv of rankValues) {
+                // Skip high-value ranks entirely for starting triples
+                if (highValueRanks.has(rv)) continue;
+                
+                const bucket = buckets.get(rv);
+                if (bucket && bucket.length >= 3) {
+                    const cards = bucket.slice(0, 3);
+                    const pattern = evaluatePattern(cards);
+                    if (pattern && pattern.type === 'triple') {
+                        return cards;
+                    }
+                }
+            }
+            
+            // Try to find pairs - avoid high-value pairs
+            for (const rv of rankValues) {
+                // Prefer not to start with high pairs, but allow if hand size is small
+                if (highValueRanks.has(rv) && hand.length > 5) continue;
+                
+                const bucket = buckets.get(rv);
+                if (bucket && bucket.length >= 2) {
+                    const cards = bucket.slice(0, 2);
+                    const pattern = evaluatePattern(cards);
+                    if (pattern && pattern.type === 'pair') {
+                        return cards;
+                    }
+                }
+            }
+            
+            // Fall back to single - prefer "poison" cards (singletons that don't fit straights)
+            // This helps dump awkward cards early when we have control
+            // rankSet already declared at top of function, no need to redeclare
+            const singletons = [];
+            for (const rv of rankValues) {
+                const bucket = buckets.get(rv);
+                if (bucket && bucket.length === 1) {
+                    singletons.push(bucket[0]);
+                }
+            }
+            
+            // Among singletons, prefer those that don't fit straights (poison cards)
+            for (const sc of singletons) {
+                if (!cardInStraightPotential(sc, rankSet)) {
+                    return [sc]; // Play poison card to get rid of it
+                }
+            }
+            
+            // Otherwise just play lowest single
+            const lowest = getLowestSingle(hand);
+            return lowest ? [lowest] : null;
+        }
+
+        function getRankBuckets(hand) {
+            const buckets = new Map();
+            for (const sc of hand) {
+                const rv = getCardRankValue(sc.card);
+                if (!buckets.has(rv)) buckets.set(rv, []);
+                buckets.get(rv).push(sc);
+            }
+            buckets.forEach((list) => {
+                list.sort((a, b) => getCardSuitValue(a.card) - getCardSuitValue(b.card));
+            });
+            return buckets;
+        }
+
+        function getSinglePlayAbove(hand, trick) {
+            const sorted = [...hand].sort((a, b) => {
+                const ra = getCardRankValue(a.card);
+                const rb = getCardRankValue(b.card);
+                if (ra !== rb) return ra - rb;
+                return getCardSuitValue(a.card) - getCardSuitValue(b.card);
+            });
+            for (const sc of sorted) {
+                const pattern = {
+                    type: 'single',
+                    cardCount: 1,
+                    rankHigh: getCardRankValue(sc.card),
+                    suitHigh: getCardSuitValue(sc.card)
+                };
+                if (canPlayPattern(pattern, trick)) return [sc];
+            }
+            return null;
+        }
+
+        function getGroupPlayAbove(hand, trick, groupSize, type) {
+            const buckets = getRankBuckets(hand);
+            const rankValues = Array.from(buckets.keys()).sort((a, b) => a - b);
+            for (const rv of rankValues) {
+                const bucket = buckets.get(rv);
+                if (bucket.length < groupSize) continue;
+                const selected = bucket.slice(0, groupSize);
+                const pattern = {
+                    type,
+                    cardCount: groupSize,
+                    rankHigh: rv,
+                    suitHigh: getHighestSuitValue(selected)
+                };
+                if (canPlayPattern(pattern, trick)) return selected;
+            }
+            return null;
+        }
+
+        function getRankSet(hand) {
+            const set = new Set();
+            for (const sc of hand) {
+                set.add(getCardRankValue(sc.card));
+            }
+            return set;
+        }
+
+        function cardInStraightPotential(card, rankSet) {
+            const rv = getCardRankValue(card.card);
+            for (let start = rv - 2; start <= rv; start++) {
+                let count = 0;
+                for (let i = 0; i < 3; i++) {
+                    if (rankSet.has(start + i)) count++;
+                }
+                if (count === 3) return true;
+            }
+            return false;
+        }
+
+        function shouldAiPass(trick, play, hand) {
+            if (!trick) return false;
+            if (!play || !play.length) return true;
+            
+            const rankSet = getRankSet(hand);
+            const twoRank = rankValue.get('2');
+            const aceRank = rankValue.get('A');
+            const kingRank = rankValue.get('K');
+            
+            // Check if play uses high-value cards
+            const uses2s = play.some((sc) => getCardRankValue(sc.card) === twoRank);
+            const usesAces = play.some((sc) => getCardRankValue(sc.card) === aceRank);
+            const usesKings = play.some((sc) => getCardRankValue(sc.card) === kingRank);
+            
+            const breaksStraight = play.some((sc) => cardInStraightPotential(sc, rankSet));
+            
+            // Calculate remaining cards after this play
+            const cardsRemaining = hand.length;
+            const cardsToPlay = play.length;
+            const cardsAfterPlay = cardsRemaining - cardsToPlay;
+            const remainingHand = hand.filter(sc => !play.includes(sc));
+            
+            // WINNING PATH ANALYSIS: If this would empty the hand, always play
+            if (cardsAfterPlay === 0) return false;
+            
+            // STRATEGIC: If winning this trick means we can play out all remaining cards, commit resources
+            // This is the key insight - use powerful cards when they lead to victory
+            if (cardsAfterPlay <= 6 && canWinAfterTakingControl(remainingHand)) {
+                // We have a winning path after taking control - use the powerful cards!
+                return false;
+            }
+            
+            // CONTROL ASSESSMENT: If we have control (highest cards), consider if we can walk down
+            if (hasControl(hand, trick) && cardsRemaining <= 5) {
+                // We have control and few cards - likely can win, so commit
+                return false;
+            }
+            
+            // POISON CARD DUMPING: If this play helps us get rid of poison cards, favor it
+            const poisonBefore = countPoisonCards(hand);
+            const poisonAfter = countPoisonCards(remainingHand);
+            const reducePoison = poisonAfter < poisonBefore;
+            
+            // If we're dumping poison cards and hand is medium-sized, be more aggressive
+            if (reducePoison && cardsRemaining <= 8 && cardsRemaining > 4) {
+                // Reduce hesitation on high cards if dumping poison
+                if (uses2s && Math.random() < 0.35) return false; // 65% chance to play
+                if (usesAces && Math.random() < 0.45) return false; // 55% chance to play
+            }
+            
+            // CRITICAL: Be much more conservative with 2s when no winning path
+            if (uses2s) {
+                // If we have lots of cards left (8+), almost always pass to save 2s
+                if (cardsRemaining >= 8 && Math.random() < 0.85) return true;
+                // With medium hand (5-7 cards), still very likely to pass
+                if (cardsRemaining >= 5 && Math.random() < 0.75) return true;
+                // Only use 2s near the end (4 or fewer cards) or if we saw winning path above
+                if (cardsRemaining > 4 && Math.random() < 0.65) return true;
+            }
+            
+            // Be conservative with Aces too, but less so than 2s
+            if (usesAces) {
+                if (cardsRemaining >= 8 && Math.random() < 0.70) return true;
+                if (cardsRemaining >= 5 && Math.random() < 0.55) return true;
+            }
+            
+            // Be somewhat careful with Kings
+            if (usesKings) {
+                if (cardsRemaining >= 8 && Math.random() < 0.50) return true;
+            }
+            
+            // If hand is small (5 or fewer cards), be more aggressive
+            if (cardsRemaining <= 5) {
+                // Already handled 2s above - only pass if using multiple high cards
+                if (usesAces || usesKings) {
+                    const highCardsInHand = hand.filter((sc) => {
+                        const rv = getCardRankValue(sc.card);
+                        return rv === aceRank || rv === kingRank || rv === twoRank;
+                    }).length;
+                    if (highCardsInHand > 3 && Math.random() < 0.35) return true;
+                }
+                return false;
+            }
+            
+            // Standard logic for larger hands with non-critical cards
+            const roll = Math.random();
+            if (breaksStraight && roll < 0.45) return true;
+            return false;
+        }
+
+        function selectGroupWithMinHigh(bucket, count, minSuitHigh) {
+            if (bucket.length < count) return null;
+            if (minSuitHigh < 0) return bucket.slice(0, count);
+            const sorted = [...bucket].sort((a, b) => getCardSuitValue(a.card) - getCardSuitValue(b.card));
+            const highCard = sorted.find((sc) => getCardSuitValue(sc.card) > minSuitHigh);
+            if (!highCard) return null;
+            const rest = sorted.filter((sc) => sc !== highCard).slice(0, count - 1);
+            if (rest.length < count - 1) return null;
+            return rest.concat(highCard);
+        }
+
+        function getStraightPlayAbove(hand, trick, length, groupSize) {
+            const buckets = getRankBuckets(hand);
+            const maxRank = rankOrder.length - 1;
+            const rankValues = Array.from({ length: rankOrder.length }, (_, i) => i);
+
+            for (let start = 0; start + length - 1 <= maxRank; start++) {
+                const seq = rankValues.slice(start, start + length);
+                if (!seq.every((rv) => buckets.has(rv) && buckets.get(rv).length >= groupSize)) continue;
+
+                const highRank = seq[seq.length - 1];
+                const needSuitHigh = (trick && highRank === trick.rankHigh)
+                    ? trick.suitHigh
+                    : -1;
+                const highBucket = buckets.get(highRank);
+                const highGroup = selectGroupWithMinHigh(highBucket, groupSize, needSuitHigh);
+                if (!highGroup) continue;
+
+                const selected = [];
+                for (const rv of seq) {
+                    const bucket = buckets.get(rv);
+                    if (rv === highRank) {
+                        selected.push(...highGroup);
+                    } else {
+                        selected.push(...bucket.slice(0, groupSize));
+                    }
+                }
+
+                const pattern = {
+                    type: groupSize === 1 ? 'straight' : (groupSize === 2 ? 'double-straight' : 'triple-straight'),
+                    cardCount: length * groupSize,
+                    rankHigh: highRank,
+                    suitHigh: getHighestSuitValue(highGroup)
+                };
+                if (canPlayPattern(pattern, trick)) return selected;
+            }
+            return null;
+        }
+
+        function aiTakeTurn(playerIndex) {
+            if (gameState.currentPlayer !== playerIndex) return;
+            const hand = playerCards[playerIndex];
+            if (!hand.length) {
+                advanceTurn();
+                return;
+            }
+            if (gameState.passed.has(playerIndex)) {
+                advanceTurn();
+                return;
+            }
+            if (!gameState.trick) {
+                let play = null;
+                if (gameState.mustInclude3S) {
+                    const forced = hand.find(isThreeOfSpades);
+                    if (forced) play = [forced];
+                }
+                if (!play) {
+                    play = getBestStartingPlay(hand);
+                }
+                if (play) {
+                    setAiSelection(playerIndex, play);
+                    setAiHoverCard(playerIndex, play[0]);
+                    const delay = st(650 + Math.random() * 450);
+                    setTimeout(() => {
+                        if (gameState.currentPlayer !== playerIndex) return;
+                        clearAiHover(playerIndex);
+                        playCardsForPlayer(playerIndex, play);
+                        clearAiSelection(playerIndex);
+                    }, delay);
+                } else {
+                    advanceTurn();
+                }
+                return;
+            }
+            const trick = gameState.trick;
+            let play = null;
+            if (trick.type === 'single') {
+                if (trick.rankHigh === rankValue.get('2')) {
+                    play = getGroupPlayAbove(hand, { type: 'four', cardCount: 4, rankHigh: -1, suitHigh: -1 }, 4, 'four');
+                }
+                if (!play) play = getSinglePlayAbove(hand, trick);
+            } else if (trick.type === 'pair') {
+                play = getGroupPlayAbove(hand, trick, 2, 'pair');
+            } else if (trick.type === 'triple') {
+                play = getGroupPlayAbove(hand, trick, 3, 'triple');
+            } else if (trick.type === 'four') {
+                play = getGroupPlayAbove(hand, trick, 4, 'four');
+            } else if (trick.type === 'straight') {
+                play = getStraightPlayAbove(hand, trick, trick.cardCount, 1);
+            } else if (trick.type === 'double-straight') {
+                play = getStraightPlayAbove(hand, trick, trick.cardCount / 2, 2);
+            } else if (trick.type === 'triple-straight') {
+                play = getStraightPlayAbove(hand, trick, trick.cardCount / 3, 3);
+            }
+
+            if (play && shouldAiPass(trick, play, hand)) {
+                play = null;
+            }
+
+            if (play) {
+                setAiSelection(playerIndex, play);
+                setAiHoverCard(playerIndex, play[0]);
+                const delay = st(700 + Math.random() * 500);
+                setTimeout(() => {
+                    if (gameState.currentPlayer !== playerIndex) return;
+                    clearAiHover(playerIndex);
+                    playCardsForPlayer(playerIndex, play);
+                    clearAiSelection(playerIndex);
+                }, delay);
+            } else {
+                clearAiSelection(playerIndex);
+                const delay = st(450 + Math.random() * 300);
+                setTimeout(() => {
+                    if (gameState.currentPlayer !== playerIndex) return;
+                    gameState.passed.add(playerIndex);
+                    console.log(`[PASS] Player ${playerIndex} passed. Passed set now: [${Array.from(gameState.passed).join(', ')}]. trickPlayersCount: ${gameState.trickPlayersCount}, will end trick if passed.size (${gameState.passed.size}) >= ${gameState.trickPlayersCount - 1}`);
+                    recordPlayerMove(playerIndex, 'Pass');
+                    advanceTurn();
+                }, delay);
+            }
+        }
+
+        function maybeAutoPlay() {
+            // In debug mode, human controls all players
+            if (gameMode === 'debug') return;
+            if (gameState.currentPlayer === 0) return;
+            if (gameState.aiPending) return;
+            gameState.aiPending = true;
+            const delay = st(900 + Math.random() * 700);
+            setTimeout(() => {
+                gameState.aiPending = false;
+                aiTakeTurn(gameState.currentPlayer);
+            }, delay);
+        }
+
+        function findPlayerWithThreeSpades() {
+            for (let i = 0; i < playerCards.length; i++) {
+                if (playerCards[i].some(isThreeOfSpades)) return i;
+            }
+            return 0;
+        }
+
+        function startRound(startPlayer, mustInclude3S) {
+            gameState.currentPlayer = startPlayer;
+            gameState.leadPlayer = startPlayer;
+            gameState.lastPlayed = null;
+            gameState.trick = null;
+            gameState.trickPlayersCount = null;
+            gameState.passed.clear();
+            gameState.mustInclude3S = mustInclude3S;
+            playStackCounter = 0;
+            for (let i = 0; i < lastMoves.length; i++) {
+                if (playerPlacements[i] === null) {
+                    lastMoves[i] = '—';
+                }
+            }
+            renderMoveHistory();
+            updateTurnStatus();
+        }
+
+        function sortCardsForTableFan(cards) {
+            return [...cards].sort((a, b) => {
+                const ra = getCardRankValue(a.card);
+                const rb = getCardRankValue(b.card);
+                if (ra !== rb) return ra - rb;
+                return getCardSuitValue(a.card) - getCardSuitValue(b.card);
+            });
+        }
+
+        function moveCardsToPile(cards, pos, pattern = null, options = {}) {
+            const fanTypes = new Set(['straight', 'double-straight', 'triple-straight', 'pair', 'triple']);
+            const useHandOffsets = options.useHandOffsets ?? false;
+            const handFanPlayerIndex = options.handFanPlayerIndex;
+            const useTableArc = options.useTableArc ?? false;
+            const shouldFan = !useHandOffsets && pattern && cards.length > 1 && fanTypes.has(pattern.type);
+            const ordered = shouldFan ? sortCardsForTableFan(cards) : cards;
+            const count = ordered.length;
+            const mid = (count - 1) / 2;
+            const spread = CARD.width * 0.45;
+            const arcDepth = CARD.length * 0.08;
+            const angleSpread = 0.12;
+            const usePhysics = options.usePhysics ?? false;
+            const tossScale = options.tossScale ?? 0.3;
+            const faceUp = options.faceUp ?? false;
+            const useShoeSlots = options.useShoeSlots ?? false;
+            const slotBase = useShoeSlots ? playStackCounter : 0;
+            if (useShoeSlots) playStackCounter += ordered.length;
+
+            let handOffsets = null;
+            let handYawMap = null;
+            let tableArcOffsets = null;
+            if (useHandOffsets) {
+                const center = ordered.reduce((acc, sc) => {
+                    if (!sc.mesh.userData.basePos) setMeshBasePosition(sc.mesh);
+                    acc.x += sc.mesh.userData.basePos.x;
+                    acc.z += sc.mesh.userData.basePos.z;
+                    return acc;
+                }, { x: 0, z: 0 });
+                center.x /= Math.max(1, ordered.length);
+                center.z /= Math.max(1, ordered.length);
+                handOffsets = new Map();
+                if (handFanPlayerIndex !== undefined && playerPositions[handFanPlayerIndex]) {
+                    const base = playerPositions[handFanPlayerIndex];
+                    const forward = getPlayerForwardXZ(base);
+                    const right = getRightFromForward(forward);
+                    const bySpread = [...ordered].sort((a, b) => {
+                        if (!a.mesh.userData.basePos) setMeshBasePosition(a.mesh);
+                        if (!b.mesh.userData.basePos) setMeshBasePosition(b.mesh);
+                        const ax = a.mesh.userData.basePos.x - center.x;
+                        const az = a.mesh.userData.basePos.z - center.z;
+                        const bx = b.mesh.userData.basePos.x - center.x;
+                        const bz = b.mesh.userData.basePos.z - center.z;
+                        const aProj = ax * right.x + az * right.z;
+                        const bProj = bx * right.x + bz * right.z;
+                        return aProj - bProj;
+                    });
+                    const fanCount = bySpread.length;
+                    const yawSpread = Math.PI / 4;
+                    handYawMap = new Map();
+                    bySpread.forEach((sc, i) => {
+                        const t = fanCount > 1 ? i / (fanCount - 1) : 0.5;
+                        const yaw = (1 - 2 * t) * yawSpread;
+                        handYawMap.set(sc, yaw);
+                    });
+                }
+                ordered.forEach((sc) => {
+                    if (!sc.mesh.userData.basePos) setMeshBasePosition(sc.mesh);
+                    handOffsets.set(sc, {
+                        x: sc.mesh.userData.basePos.x - center.x,
+                        z: sc.mesh.userData.basePos.z - center.z,
+                        rotY: getObjectYRotation(sc.mesh)
+                    });
+                });
+            }
+
+            if (useTableArc && ordered.length > 1) {
+                // Rotate arc orientation based on player position
+                // Player 0 (front): 0°, Player 1 (right): -90°, Player 2 (back): 180°, Player 3 (left): 90°
+                const arcPlayerIndex = options.arcPlayerIndex ?? 0;
+                const rotationAngles = [0, -Math.PI/2, Math.PI, Math.PI/2];
+                const arcRotation = rotationAngles[arcPlayerIndex] || 0;
+                
+                const forward = { 
+                    x: -Math.sin(arcRotation), 
+                    z: Math.cos(arcRotation) 
+                };
+                
+                const right = { 
+                    x: Math.cos(arcRotation), 
+                    z: Math.sin(arcRotation) 
+                };
+                const startOffset = -(ordered.length - 1) / 2;
+                const midT = 0.5;
+                const midScaled = 0.5 + (midT - 0.5) * HAND_FAN.arcSpan;
+                const midOffset = (startOffset + midT * (ordered.length - 1))
+                    * HAND_FAN.spread
+                    * getCardSpreadMultiplier(Math.round(midT * (ordered.length - 1)), ordered.length, midScaled)
+                    * HAND_FAN.arcSpan;
+                const midDepth = midT * (ordered.length - 1) * HAND_FAN.depthStep;
+                const midArc = getArcHeightAtParameter(midScaled) * HAND_FAN.arcLift;
+                const midX = right.x * midOffset + forward.x * midDepth;
+                const midZ = right.z * midOffset + forward.z * midDepth;
+                
+                // Rotation quaternion to orient the arc toward the player
+                const arcRotationQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), arcRotation);
+                
+                tableArcOffsets = ordered.map((_, idx) => {
+                    const t = ordered.length > 1 ? idx / (ordered.length - 1) : 0.5;
+                    const tScaled = 0.5 + (t - 0.5) * HAND_FAN.arcSpan;
+                    const spreadMultiplier = getCardSpreadMultiplier(Math.round(t * (ordered.length - 1)), ordered.length, tScaled);
+                    const offset = (startOffset + t * (ordered.length - 1)) * HAND_FAN.spread * spreadMultiplier * HAND_FAN.arcSpan;
+                    const depthOffset = t * (ordered.length - 1) * HAND_FAN.depthStep;
+                    const localX = right.x * offset + forward.x * depthOffset;
+                    const localZ = right.z * offset + forward.z * depthOffset;
+                    
+                    // Apply twist in local space (before rotation), then rotate entire system
+                    const twistAngle = (1 - 2 * t) * (Math.PI / 4);
+                    const localTwistQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), twistAngle);
+                    
+                    // Combine: first twist in local space, then rotate to face player
+                    let targetQuat = arcRotationQuat.clone().multiply(localTwistQuat);
+                    
+                    // Add 180° card flip for Player 4 and Player 2 (indices 1 and 3)
+                    if (arcPlayerIndex === 1 || arcPlayerIndex === 3) {
+                        const cardFlipQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+                        targetQuat = targetQuat.multiply(cardFlipQuat);
+                    }
+                    
+                    return { x: localX - midX, z: localZ - midZ, quat: targetQuat };
+                });
+            }
+
+            ordered.forEach((sc, idx) => {
+                let toX = pos.x + (idx % 4) * 0.04;
+                let toZ = pos.z + Math.floor(idx / 4) * 0.04;
+                let toY = pos.y + idx * CARD.thickness * 1.1;
+                let rotY = 0;
+                let toQuat = null;
+
+                if (useShoeSlots) {
+                    const slotIndex = slotBase + idx;
+                    const slot = shoeStackSlots[slotIndex];
+                    if (slot) toY = slot.y;
+                }
+
+                // Single card plays with table arc - orient toward player using quaternion
+                // Use same rotation system as multi-card arcs to ensure consistency
+                if (useTableArc && !tableArcOffsets && options.arcPlayerIndex !== undefined) {
+                    const rotationAngles = [0, -Math.PI/2, Math.PI, Math.PI/2];
+                    const arcRotation = rotationAngles[options.arcPlayerIndex] || 0;
+                    
+                    // Add 180° card flip for Player 4 and Player 2 (indices 1 and 3)
+                    let cardFlipAdjustment = 0;
+                    if (options.arcPlayerIndex === 1 || options.arcPlayerIndex === 3) {
+                        cardFlipAdjustment = Math.PI;
+                    }
+                    
+                    const finalRotation = arcRotation + cardFlipAdjustment;
+                    toQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), finalRotation);
+                }
+
+                if (useTableArc && tableArcOffsets) {
+                    const arc = tableArcOffsets[idx];
+                    toX = pos.x + arc.x;
+                    toZ = pos.z + arc.z;
+                    toQuat = arc.quat;
+                } else if (shouldFan) {
+                    const offset = (idx - mid) * spread;
+                    const arcT = mid > 0 ? Math.abs(idx - mid) / mid : 0;
+                    const arcFactor = 0.5 * (1 + Math.cos(Math.PI * arcT));
+                    const depth = (arcFactor - 1) * arcDepth;
+                    toX = pos.x + offset;
+                    toZ = pos.z + depth;
+                    toY = pos.y + idx * CARD.thickness * 1.1;
+                    rotY = (idx - mid) * angleSpread;
+                } else if (useHandOffsets && handOffsets?.has(sc)) {
+                    const offset = handOffsets.get(sc);
+                    toX = pos.x + offset.x;
+                    toZ = pos.z + offset.z;
+                    rotY = handYawMap?.get(sc) ?? offset.rotY;
+                } else if (usePhysics) {
+                    // Stack plays directly on center for single/stacked hands
+                    toX = pos.x;
+                    toZ = pos.z;
+                }
+
+                if (usePhysics) {
+                    const fromPos = {
+                        x: sc.mesh.position.x,
+                        y: sc.mesh.position.y,
+                        z: sc.mesh.position.z
+                    };
+                    enableCardPhysics(sc, fromPos, { x: toX, y: toY, z: toZ }, toQuat || rotY, tossScale, faceUp);
+                } else {
+                    const slideOpts = toQuat
+                        ? { useMesh: true, toQuat }
+                        : { useMesh: true, rotX: 0, rotY, rotZ: 0 };
+                    addSlideTween(
+                        sc,
+                        sc.mesh.position.x,
+                        sc.mesh.position.z,
+                        toX,
+                        toZ,
+                        sc.mesh.position.y,
+                        toY,
+                        st(280),
+                        slideOpts
+                    );
+                }
+            });
+        }
+
+        function enableCardPhysics(sc, fromPos, targetPos, rotYOrQuat = 0, tossScale = 0.25, faceUp = false) {
+            if (!sc.body.world) {
+                world.addBody(sc.body);
+            }
+            sc.body.type = CANNON.Body.DYNAMIC;
+            sc.body.mass = CARD_MASS;
+            sc.body.updateMassProperties();
+            sc.body.linearDamping = 0.7;
+            sc.body.angularDamping = 0.6;
+            sc.body.position.set(fromPos.x, fromPos.y, fromPos.z);
+            
+            // Handle quaternion or euler angle
+            if (rotYOrQuat instanceof THREE.Quaternion) {
+                sc.body.quaternion.set(rotYOrQuat.x, rotYOrQuat.y, rotYOrQuat.z, rotYOrQuat.w);
+            } else {
+                sc.body.quaternion.setFromEuler(0, rotYOrQuat, 0);
+            }
+            
+            if (!sc.body.userData) sc.body.userData = {};
+            if (faceUp) {
+                sc.body.fixedRotation = false;
+                sc.body.angularFactor.set(1, 1, 1);
+                sc.body.userData.faceUpLimit = true;
+                sc.body.userData.pileLock = true;
+            } else {
+                sc.body.fixedRotation = false;
+                sc.body.angularFactor.set(1, 1, 1);
+                sc.body.userData.faceUpLimit = false;
+                sc.body.userData.pileLock = false;
+            }
+            // Remember target Y so we can snap after sleep to avoid z-fighting
+            sc.body.userData.targetY = targetPos.y;
+            const dx = targetPos.x - fromPos.x;
+            const dy = targetPos.y - fromPos.y;
+            const dz = targetPos.z - fromPos.z;
+            const dist = Math.hypot(dx, dy, dz) || 1;
+            const g = Math.abs(world.gravity.y);
+            const baseTime = Math.max(0.28, Math.min(0.55, dist / 3.2));
+            const flightTime = baseTime / (0.6 + tossScale);
+            sc.body.velocity.set(
+                dx / flightTime,
+                (dy + 0.5 * g * flightTime * flightTime) / flightTime,
+                dz / flightTime
+            );
+            if (faceUp) {
+                // Reduced tumble on X/Z for natural settling; full Y spin
+                sc.body.angularVelocity.set(
+                    (Math.random() - 0.5) * tossScale * 0.3,
+                    (Math.random() - 0.5) * tossScale,
+                    (Math.random() - 0.5) * tossScale * 0.3
+                );
+            } else {
+                sc.body.angularVelocity.set((Math.random() - 0.5) * tossScale, (Math.random() - 0.5) * tossScale, (Math.random() - 0.5) * tossScale);
+            }
+            sc.body.wakeUp();
+            sc.mesh.position.copy(sc.body.position);
+            sc.mesh.quaternion.copy(sc.body.quaternion);
+            setMeshBasePosition(sc.mesh);
+        }
+
+        function clampFaceUpTilt(sc) {
+            if (!sc.body?.userData?.faceUpLimit) return;
+            const maxTilt = Math.PI / 8;  // ~22.5° to prevent clipping while allowing settling
+            const quat = new THREE.Quaternion(
+                sc.body.quaternion.x,
+                sc.body.quaternion.y,
+                sc.body.quaternion.z,
+                sc.body.quaternion.w
+            );
+            const euler = new THREE.Euler().setFromQuaternion(quat, 'YXZ');
+            const clampedX = Math.max(-maxTilt, Math.min(maxTilt, euler.x));
+            const clampedZ = Math.max(-maxTilt, Math.min(maxTilt, euler.z));
+            if (clampedX !== euler.x || clampedZ !== euler.z) {
+                const fixedQuat = new THREE.Quaternion().setFromEuler(
+                    new THREE.Euler(clampedX, euler.y, clampedZ, 'YXZ')
+                );
+                sc.body.quaternion.set(fixedQuat.x, fixedQuat.y, fixedQuat.z, fixedQuat.w);
+                sc.body.angularVelocity.set(0, 0, 0);
+            }
+        }
+
+        function getAllCardRefs() {
+            const set = new Set();
+            shoeCards.forEach((sc) => set.add(sc));
+            playerCards.forEach((hand) => hand.forEach((sc) => set.add(sc)));
+            currentHandCards.forEach((sc) => set.add(sc));
+            return Array.from(set);
+        }
+
+        function clearTrickPile() {
+            console.log(`[CLEAR TRICK] Before: currentHandCards has ${currentHandCards.length} cards`);
+            if (!currentHandCards.length) {
+                console.log(`[CLEAR TRICK] No cards to clear!`);
+                return;
+            }
+            moveCardsToPile(currentHandCards, DISCARD_POS, null, { usePhysics: false, faceUp: false });
+            currentHandCards = [];
+            console.log(`[CLEAR TRICK] After: currentHandCards cleared`);
+        }
+
+        function nextActivePlayer(fromIndex) {
+            const clockwiseOrder = [1, 0, 3, 2];
+            const total = clockwiseOrder.length;
+            let pos = clockwiseOrder.indexOf(fromIndex);
+            if (pos === -1) pos = 0;
+            for (let i = 0; i < total; i++) {
+                pos = (pos + 1) % total;
+                const idx = clockwiseOrder[pos];
+                // Skip players with no cards OR who have passed this trick
+                if (playerCards[idx].length > 0 && !gameState.passed.has(idx)) return idx;
+            }
+            return fromIndex;
+        }
+
+        function checkRoundEnd() {
+            const active = playerCards.filter((hand) => hand.length > 0).length;
+            return active <= 1;
+        }
+
+        function animateEndGameTransition(callback) {
+            console.log('Starting end-game transition animation...');
+            const shoePos = SHOE_POS;
+            
+            // Flip all cards face-down and collect them to center
+            const allCards = [];
+            playerCards.forEach(hand => hand.forEach(sc => allCards.push(sc)));
+            if (currentHandCards.length) allCards.push(...currentHandCards);
+            shoeCards.forEach(sc => allCards.push(sc));
+            
+            console.log(`Collecting ${allCards.length} cards to center pile...`);
+            
+            // Flip each card face-down and move to center shoe position
+            allCards.forEach((sc, idx) => {
+                // Flip to face-down (rotate 180° on X)
+                const faceDownQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+                
+                // Animate to shoe center with slight randomness to avoid overlap during movement
+                const randomX = (Math.random() - 0.5) * 0.3;
+                const randomZ = (Math.random() - 0.5) * 0.3;
+                const targetY = shoePos.y + idx * CARD.thickness * 0.5; // Stack height with buffer
+                
+                addSlideTween(
+                    sc,
+                    sc.mesh.position.x,
+                    sc.mesh.position.z,
+                    shoePos.x + randomX,
+                    shoePos.z + randomZ,
+                    sc.mesh.position.y,
+                    targetY,
+                    st(600),
+                    {
+                        useMesh: true,
+                        toQuat: faceDownQuat,
+                        lift: 0.2
+                    }
+                );
+            });
+            
+            // Let shuffleShoe handle camera movement (saves player 1 POV and animates to shoe)
+            // Start shuffle once animations settle
+            setTimeout(() => {
+                if (callback) callback();
+            }, st(800));
+        }
+
+        function restartGameAfterRound(loserIndex) {
+            const totalPlayers = playerCards.length;
+            const winnerIndex = finishOrder.length > 0 ? finishOrder[0] : -1;
+
+            if (loserIndex >= 0 && playerPlacements[loserIndex] === null) {
+                const placement = finishOrder.length + 1;
+                playerPlacements[loserIndex] = placement;
+                const lastText = lastMoves[loserIndex] ?? '—';
+                lastMoves[loserIndex] = `${lastText} - ${formatPlacement(placement)} place`;
+                renderMoveHistory();
+            }
+
+            if (winnerIndex >= 0 && winnerIndex < totalPlayers) {
+                gameState.leadPlayer = winnerIndex;
+            }
+
+            gameState.round += 1;
+            gameState.currentPlayer = gameState.leadPlayer;
+            gameState.lastPlayed = null;
+            gameState.trick = null;
+            gameState.trickPlayersCount = null;
+            gameState.passed.clear();
+            gameState.mustInclude3S = false;
+            currentHandCards = [];
+            playStackCounter = 0;
+            clearSelection();
+
+            // Reset placements for the new game and re-deal a fresh shoe
+            resetPlacementsForNewGame();
+            
+            // Animate transition: collect cards, flip to face-down, move to center
+            animateEndGameTransition(() => {
+                initializeShoe();
+                shuffleShoe(true);
+            });
+        }
+
+        function advanceTurn() {
+            // First check: does the active trick need to end before we check for round-end?
+            // This ensures all players get a chance to play on someone's final card
+            // BUT: if trickPlayersCount <= 1, there's only one player left, so skip trick-ending logic
+            // and let that player get their turn (they'll either play or the game will end naturally)
+            if (gameState.trick && gameState.trickPlayersCount && gameState.trickPlayersCount > 1 && gameState.passed.size >= gameState.trickPlayersCount - 1) {
+                console.log(`[TRICK END] Clearing trick. Passed: ${gameState.passed.size}, Active: ${gameState.trickPlayersCount}`);
+                console.log(`[TRICK END] currentHandCards count: ${currentHandCards.length}`);
+                clearTrickPile();
+                gameState.trick = null;
+                gameState.trickPlayersCount = null;
+                gameState.passed.clear();
+                let nextLead = gameState.lastPlayed ?? gameState.leadPlayer;
+                if (playerCards[nextLead].length === 0) {
+                    console.log(`[TRICK END] Last played player ${nextLead} has no cards, finding next active`);
+                    nextLead = nextActivePlayer(nextLead);
+                    console.log(`[TRICK END] Next lead player: ${nextLead}`);
+                }
+                gameState.currentPlayer = nextLead;
+                gameState.leadPlayer = gameState.currentPlayer;
+                gameState.mustInclude3S = false;
+                // Clear selection when turn changes in debug mode
+                if (gameMode === 'debug') clearSelection();
+                // Refresh arc debug line for new player if enabled
+                if (debugState.showArcLine) {
+                    setArcDebugLinesVisible(true, gameState.currentPlayer);
+                }
+                // Now check if the game has ended after trick completion
+                if (checkRoundEnd()) {
+                    const loserIndex = playerCards.findIndex((hand) => hand.length > 0);
+                    console.log(`[GAME END] Game over after trick end! Loser: ${loserIndex}, currentHandCards: ${currentHandCards.length}`);
+                    if (loserIndex >= 0) {
+                        setStatus(`Round over — ${getPlayerLabel(loserIndex)} loses.`);
+                    }
+                    updateActionButtons();
+                    setTimeout(() => {
+                        restartGameAfterRound(loserIndex);
+                    }, st(1200));
+                    return;
+                }
+                updateTurnStatus();
+                return;
+            }
+
+            // Second check: now see if the game/round has ended
+            if (checkRoundEnd()) {
+                const loserIndex = playerCards.findIndex((hand) => hand.length > 0);
+                console.log(`[GAME END] Game over! Loser: ${loserIndex}, currentHandCards: ${currentHandCards.length}`);
+                if (loserIndex >= 0) {
+                    setStatus(`Round over — ${getPlayerLabel(loserIndex)} loses.`);
+                }
+                updateActionButtons();
+                setTimeout(() => {
+                    restartGameAfterRound(loserIndex);
+                }, st(1200));
+                return;
+            }
+
+            gameState.currentPlayer = nextActivePlayer(gameState.currentPlayer);
+            // Clear selection when turn changes in debug mode
+            if (gameMode === 'debug') clearSelection();
+            // Refresh arc debug line for new player if enabled
+            if (debugState.showArcLine) {
+                setArcDebugLinesVisible(true, gameState.currentPlayer);
+            }
+            updateTurnStatus();
+        }
+
+        function playCardsForPlayer(playerIndex, cards) {
+            const pattern = evaluatePattern(cards);
+            
+            // In debug mode, skip all validation checks
+            if (gameMode !== 'debug') {
+                if (!pattern) {
+                    if (playerIndex === 0) setStatus('Invalid pattern selected.');
+                    return false;
+                }
+                if (!gameState.trick && gameState.mustInclude3S && !cards.some(isThreeOfSpades)) {
+                    if (playerIndex === 0) setStatus('First play must include the 3♠.');
+                    return false;
+                }
+                if (!canPlayPattern(pattern, gameState.trick)) {
+                    if (playerIndex === 0) setStatus('Selected cards do not beat the current hand.');
+                    return false;
+                }
+            }
+
+            playerCards[playerIndex] = playerCards[playerIndex].filter((sc) => !cards.includes(sc));
+            // Clear selection after playing cards (for any player in debug mode)
+            clearSelection();
+            gameState.trick = pattern;
+            // Record how many players have cards now (before anyone goes out from this play)
+            gameState.trickPlayersCount = playerCards.filter((hand) => hand.length > 0).length;
+            console.log(`[PLAY CARDS] Player ${playerIndex} played ${cards.length} card(s). trickPlayersCount set to ${gameState.trickPlayersCount}. Remaining hands: [${playerCards.map(h => h.length).join(', ')}]`);
+            gameState.lastPlayed = playerIndex;
+            gameState.passed.delete(playerIndex);
+            const highCard = getHighestCard(cards);
+            const moveLabel = `${describePattern(pattern)} — ${formatCard(highCard)}`;
+            recordPlayerMove(playerIndex, moveLabel);
+            currentHandCards = currentHandCards.concat(cards);
+            console.log(`[PLAY CARDS] currentHandCards now has ${currentHandCards.length} cards total`);
+            moveCardsToPile(cards, TRICK_POS, pattern, { usePhysics: false, faceUp: true, useShoeSlots: true, useTableArc: true, arcPlayerIndex: playerIndex });
+            fanPlayerHand(playerIndex);
+            gameState.mustInclude3S = false;
+            if (playerCards[playerIndex].length === 0) {
+                console.log(`[PLAY CARDS] Player ${playerIndex} is out after this play`);
+                markPlayerFinished(playerIndex, moveLabel);
+            }
+            advanceTurn();
+            return true;
+        }
+
+        function playSelectedCards() {
+            // In debug mode, allow current player to play; in AI mode, only player 0
+            const controllablePlayer = gameMode === 'debug' ? gameState.currentPlayer : 0;
+            if (gameState.currentPlayer !== controllablePlayer) return;
+            const selected = playerCards[controllablePlayer].filter((sc) => selectedCards.has(sc));
+            if (!selected.length) {
+                setStatus('Select cards to play.');
+                return;
+            }
+            if (!playCardsForPlayer(controllablePlayer, selected)) return;
+        }
+
+        function passTurn() {
+            // In debug mode, allow current player to pass; in AI mode, only player 0
+            const controllablePlayer = gameMode === 'debug' ? gameState.currentPlayer : 0;
+            if (gameState.currentPlayer !== controllablePlayer) return;
+            // In debug mode, allow passing even on open hands
+            if (gameMode !== 'debug' && !gameState.trick) {
+                setStatus('You cannot pass on an open hand.');
+                return;
+            }
+            gameState.passed.add(controllablePlayer);
+            console.log(`[PASS] Player ${controllablePlayer} (human) passed. Passed set now: [${Array.from(gameState.passed).join(', ')}]. trickPlayersCount: ${gameState.trickPlayersCount}, will end trick if passed.size (${gameState.passed.size}) >= ${gameState.trickPlayersCount - 1}`);
+            recordPlayerMove(controllablePlayer, 'Pass');
+            clearSelection();
+            advanceTurn();
+        }
+
         const HAND_FAN = {
-            lift: 0.28,
-            spread: CARD.width * 0.85,
+            lift: 0.35,
+            spread: CARD.width * 0.6,
             forwardOffset: 0.38,
-            thicknessStep: CARD.thickness * 0.04,
+            thicknessStep: 0,
+            depthStep: CARD.thickness,
+            arcLift: CARD.thickness * 200,
+            arcSpan: 0.55,
             settleLift: 0.05,
             settleTime: 420
         };
@@ -1202,6 +2810,321 @@
             return { x: forward.z, z: -forward.x };
         }
 
+        // Smooth mathematical arc function
+        // Takes a normalized parameter t from 0 (left edge) to 1 (right edge)
+        // Returns the height multiplier (0 at edges, 1 at center)
+        function getArcHeightAtParameter(t) {
+            // Normalize t to range -1 to 1 (left to right)
+            const x = (t - 0.5) * 2;
+            // Slightly higher and uniformly steeper arc
+            const amplitude = 1.5;
+            const tightness = 1.2;
+            const scaledX = x * tightness;
+            const base = 1 - (scaledX * scaledX);
+            return base * amplitude;
+        }
+
+        // Calculate height contribution from the arc at a given normalized distance from center
+        function getCardHeightOnArc(cardIndex, totalCards, arcLift, tOverride) {
+            // Map card index to parameter from 0 to 1
+            const t = tOverride ?? (totalCards > 1 ? cardIndex / (totalCards - 1) : 0.5);
+            const arcFactor = getArcHeightAtParameter(t);
+            return arcFactor * arcLift;
+        }
+
+        // Calculate spread multiplier at a given normalized distance from center
+        function getCardSpreadMultiplier(cardIndex, totalCards, tOverride) {
+            const t = tOverride ?? (totalCards > 1 ? cardIndex / (totalCards - 1) : 0.5);
+            const normalizedDistance = Math.abs(t - 0.5) * 2;
+            
+            // Taper inward at edges: full spread (1.0) at center, reduced at edges
+            return 1.0 - (0.12 * normalizedDistance);
+        }
+
+        // Debug function: Draw the arc line for a player
+        function drawDebugArcLine(playerIndex, numCards = 13) {
+            const base = playerPositions[playerIndex];
+            const forward = getPlayerForwardXZ(base);
+            const right = getRightFromForward(forward);
+            const startOffset = -(numCards - 1) / 2;
+            
+            const pivotX = base.x + forward.x * HAND_FAN.forwardOffset;
+            const pivotZ = base.z + forward.z * HAND_FAN.forwardOffset;
+            const pivotY = TABLE_Y_SHIFT + HAND_FAN.lift;
+            
+            let axis = 'z';
+            if (playerIndex === 1 || playerIndex === 3) {
+                axis = 'x';
+            }
+            
+            const points = [];
+            // Sample 100 points along the smooth arc curves
+            for (let sample = 0; sample <= 100; sample++) {
+                const t = sample / 100; // 0 to 1
+                const tScaled = 0.5 + (t - 0.5) * HAND_FAN.arcSpan;
+                const spreadMultiplier = getCardSpreadMultiplier(Math.round(t * (numCards - 1)), numCards, tScaled);
+                const offset = (startOffset + t * (numCards - 1)) * HAND_FAN.spread * spreadMultiplier * HAND_FAN.arcSpan;
+                const depthOffset = t * (numCards - 1) * HAND_FAN.depthStep;
+                
+                let px = pivotX + forward.x * depthOffset;
+                let py = pivotY + t * (numCards - 1) * HAND_FAN.thicknessStep;
+                const arcHeight = getArcHeightAtParameter(tScaled) * HAND_FAN.arcLift;
+                py += arcHeight;
+                py -= CARD.thickness / 2;
+                
+                let pz = pivotZ + forward.z * depthOffset;
+                
+                if (axis === 'z') {
+                    px = pivotX + right.x * offset;
+                } else {
+                    pz = pivotZ + right.z * offset;
+                }
+                
+                points.push(new THREE.Vector3(px, py, pz));
+            }
+            
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 });
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            return line;
+        }
+
+        function drawTableArcLine(numCards = 13, playerIndex = 0) {
+            // Apply same rotation logic as actual card placement
+            const rotationAngles = [0, -Math.PI/2, Math.PI, Math.PI/2];
+            const arcRotation = rotationAngles[playerIndex] || 0;
+            
+            const forward = { 
+                x: -Math.sin(arcRotation), 
+                z: Math.cos(arcRotation) 
+            };
+            
+            const right = { 
+                x: Math.cos(arcRotation), 
+                z: Math.sin(arcRotation) 
+            };
+            
+            const startOffset = -(numCards - 1) / 2;
+
+            const pivotX = TRICK_POS.x;
+            const pivotZ = TRICK_POS.z;
+            const pivotY = TRICK_POS.y;
+
+            const midT = 0.5;
+            const midScaled = 0.5 + (midT - 0.5) * HAND_FAN.arcSpan;
+            const midOffset = (startOffset + midT * (numCards - 1)) * HAND_FAN.spread * getCardSpreadMultiplier(Math.round(midT * (numCards - 1)), numCards, midScaled) * HAND_FAN.arcSpan;
+            const midDepth = midT * (numCards - 1) * HAND_FAN.depthStep;
+            const midArc = getArcHeightAtParameter(midScaled) * HAND_FAN.arcLift;
+            const midPx = right.x * midOffset + forward.x * midDepth;
+            const midPz = right.z * midOffset + forward.z * midDepth;
+
+            const points = [];
+            for (let sample = 0; sample <= 100; sample++) {
+                const t = sample / 100;
+                const tScaled = 0.5 + (t - 0.5) * HAND_FAN.arcSpan;
+                const spreadMultiplier = getCardSpreadMultiplier(Math.round(t * (numCards - 1)), numCards, tScaled);
+                const offset = (startOffset + t * (numCards - 1)) * HAND_FAN.spread * spreadMultiplier * HAND_FAN.arcSpan;
+                const depthOffset = t * (numCards - 1) * HAND_FAN.depthStep;
+
+                let px = right.x * offset + forward.x * depthOffset;
+                let pz = right.z * offset + forward.z * depthOffset;
+
+                px -= midPx;
+                pz -= midPz;
+
+                points.push(new THREE.Vector3(px + pivotX, pivotY, pz + pivotZ));
+            }
+
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ color: 0xffaa00, linewidth: 2 });
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            return line;
+        }
+
+        function getCardRefFromObject(obj) {
+            let node = obj;
+            while (node) {
+                if (node.userData && node.userData.cardRef) return node.userData.cardRef;
+                node = node.parent;
+            }
+            return null;
+        }
+
+        function setCardHighlight(sc, enabled) {
+            sc.mesh.traverse((child) => {
+                if (!child.isMesh || !child.material) return;
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach((mat) => {
+                    if (!mat.emissive) return;
+                    if (mat.userData.baseEmissive === undefined) {
+                        mat.userData.baseEmissive = mat.emissive.clone();
+                    }
+                    if (enabled) {
+                        mat.emissive.set(0x334455);
+                        mat.emissiveIntensity = 0.6;
+                    } else {
+                        mat.emissive.copy(mat.userData.baseEmissive);
+                        mat.emissiveIntensity = 1;
+                    }
+                });
+            });
+        }
+
+        function handleCardSelection(event) {
+            // In debug mode, allow interaction with current player's hand
+            // In AI mode, only allow player 0
+            const controllablePlayer = gameMode === 'debug' ? gameState.currentPlayer : 0;
+            if (gameState.currentPlayer !== controllablePlayer) return;
+            const hand = playerCards[controllablePlayer];
+            if (!hand.length) return;
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(hand.map((sc) => sc.mesh), true);
+            if (!hits.length) return;
+            const sc = getCardRefFromObject(hits[0].object);
+            if (!sc) return;
+            toggleCardSelection(sc);
+        }
+
+        function toggleCardSelection(sc) {
+            if (selectedCards.has(sc)) {
+                selectedCards.delete(sc);
+                setCardHighlight(sc, false);
+            } else {
+                selectedCards.add(sc);
+                setCardHighlight(sc, true);
+            }
+        }
+
+        function clearSelection() {
+            selectedCards.forEach((sc) => setCardHighlight(sc, false));
+            selectedCards.clear();
+        }
+
+        function updateHoveredCard() {
+            // In debug mode, hover current player's cards; in AI mode, only player 0
+            const controllablePlayer = gameMode === 'debug' ? gameState.currentPlayer : 0;
+            if (gameState.currentPlayer !== controllablePlayer) {
+                hoveredCard = null;
+                return;
+            }
+            const hand = playerCards[controllablePlayer];
+            if (!hand.length) {
+                hoveredCard = null;
+                return;
+            }
+            raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(hand.map((sc) => sc.mesh), true);
+            if (!hits.length) {
+                hoveredCard = null;
+                return;
+            }
+            hoveredCard = getCardRefFromObject(hits[0].object);
+        }
+
+        function applyHoverOffsets() {
+            // In debug mode, apply offsets to current player's cards; in AI mode, only player 0
+            const controllablePlayer = gameMode === 'debug' ? gameState.currentPlayer : 0;
+            const hand = playerCards[controllablePlayer];
+            for (const sc of hand) {
+                let state = hoverState.get(sc);
+                if (!state) {
+                    state = { current: 0 };
+                    hoverState.set(sc, state);
+                }
+                let selState = selectState.get(sc);
+                if (!selState) {
+                    selState = { current: 0 };
+                    selectState.set(sc, selState);
+                }
+                const isSelected = selectedCards.has(sc);
+                const target = (!isSelected && sc === hoveredCard) ? 1 : 0;
+                state.current += (target - state.current) * HOVER_LERP;
+                const selectTarget = isSelected ? 1 : 0;
+                selState.current += (selectTarget - selState.current) * SELECT_LERP;
+                if (!sc.mesh.userData.basePos) {
+                    setMeshBasePosition(sc.mesh);
+                }
+                const basePos = sc.mesh.userData.basePos;
+                const liftAmount = (HOVER_LIFT * state.current) + (SELECT_LIFT * selState.current);
+                if (liftAmount > 0.001) {
+                    hoverForward.set(0, 0, -1).applyQuaternion(sc.mesh.quaternion).normalize();
+                    sc.mesh.position.copy(basePos).addScaledVector(hoverForward, liftAmount);
+                } else {
+                    sc.mesh.position.copy(basePos);
+                }
+            }
+        }
+
+        function getAiSelectedSet(playerIndex) {
+            if (!aiSelectedByPlayer.has(playerIndex)) {
+                aiSelectedByPlayer.set(playerIndex, new Set());
+            }
+            return aiSelectedByPlayer.get(playerIndex);
+        }
+
+        function setAiSelection(playerIndex, cards) {
+            const set = getAiSelectedSet(playerIndex);
+            set.clear();
+            cards.forEach((sc) => set.add(sc));
+        }
+
+        function clearAiSelection(playerIndex) {
+            const set = getAiSelectedSet(playerIndex);
+            set.clear();
+        }
+
+        function setAiHoverCard(playerIndex, sc) {
+            aiHoverByPlayer.set(playerIndex, sc);
+        }
+
+        function clearAiHover(playerIndex) {
+            aiHoverByPlayer.delete(playerIndex);
+        }
+
+        function applyAiOffsets() {
+            for (let playerIndex = 1; playerIndex < playerCards.length; playerIndex++) {
+                // In debug mode, skip the current player (they use human controls)
+                if (gameMode === 'debug' && playerIndex === gameState.currentPlayer) {
+                    continue;
+                }
+                const hand = playerCards[playerIndex];
+                const selected = getAiSelectedSet(playerIndex);
+                const hovered = aiHoverByPlayer.get(playerIndex) ?? null;
+                for (const sc of hand) {
+                    let hover = aiHoverState.get(sc);
+                    if (!hover) {
+                        hover = { current: 0 };
+                        aiHoverState.set(sc, hover);
+                    }
+                    let sel = aiSelectState.get(sc);
+                    if (!sel) {
+                        sel = { current: 0 };
+                        aiSelectState.set(sc, sel);
+                    }
+                    const hoverTarget = sc === hovered ? 1 : 0;
+                    hover.current += (hoverTarget - hover.current) * AI_HOVER_LERP;
+                    const selectTarget = selected.has(sc) ? 1 : 0;
+                    sel.current += (selectTarget - sel.current) * AI_SELECT_LERP;
+
+                    if (!sc.mesh.userData.basePos) {
+                        setMeshBasePosition(sc.mesh);
+                    }
+                    const basePos = sc.mesh.userData.basePos;
+                    const liftAmount = (AI_HOVER_LIFT * hover.current) + (AI_SELECT_LIFT * sel.current);
+                    if (liftAmount > 0.001) {
+                        hoverForward.set(0, 0, -1).applyQuaternion(sc.mesh.quaternion).normalize();
+                        sc.mesh.position.copy(basePos).addScaledVector(hoverForward, liftAmount);
+                    } else {
+                        sc.mesh.position.copy(basePos);
+                    }
+                }
+            }
+        }
 
         function fanPlayerHand(playerIndex) {
             const cards = playerCards[playerIndex];
@@ -1243,13 +3166,30 @@
             const pivotY = TABLE_Y_SHIFT + HAND_FAN.lift;
 
             cards.forEach((card, i) => {
-                const offset = (startOffset + i) * HAND_FAN.spread;
-                let targetX = pivotX;
+                // Get spread multiplier from arc function
+                const t = cards.length > 1 ? i / (cards.length - 1) : 0.5;
+                const tScaled = 0.5 + (t - 0.5) * HAND_FAN.arcSpan;
+                const spreadMultiplier = getCardSpreadMultiplier(i, cards.length, tScaled);
+                const offset = (startOffset + i) * HAND_FAN.spread * spreadMultiplier * HAND_FAN.arcSpan;
+                const depthOffset = i * HAND_FAN.depthStep;
+                let targetX = pivotX + forward.x * depthOffset;
                 let targetY = pivotY + i * HAND_FAN.thicknessStep;
-                let targetZ = pivotZ;
+                
+                // Get height contribution from arc (replaces all the old if statements)
+                const arcHeight = getCardHeightOnArc(i, cards.length, HAND_FAN.arcLift, tScaled);
+                targetY += arcHeight;
+                // Shift down so the arc runs along the bottom surface of each card
+                targetY -= CARD.thickness / 2;
+                
+                let targetZ = pivotZ + forward.z * depthOffset;
                 const rotX = baseRotX;
                 const rotY = baseYaw;
                 const rotZ = baseRotZ;
+                const baseQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(rotX, rotY, rotZ, 'YXZ'));
+                const faceNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(baseQuat).normalize();
+                const twistAngle = (1 - 2 * t) * (Math.PI / 4);
+                const twistQuat = new THREE.Quaternion().setFromAxisAngle(faceNormal, twistAngle);
+                const targetQuat = twistQuat.multiply(baseQuat);
 
                 if (axis === 'z') {
                     targetX = pivotX + right.x * offset;
@@ -1276,6 +3216,7 @@
                         rotEnd: 1,
                         rotX,
                         rotZ,
+                        toQuat: targetQuat,
                         lift: HAND_FAN.settleLift,
                         useMesh: true
                     }
@@ -1307,6 +3248,9 @@
                     console.log('All cards dealt! Total:', cardDealtCount);
                     setTimeout(() => {
                         fanAllHands();
+                        const startPlayer = gameState.round === 1 ? findPlayerWithThreeSpades() : gameState.leadPlayer;
+                        const mustInclude3S = gameState.round === 1;
+                        startRound(startPlayer, mustInclude3S);
                     }, st(500));
                     return;
                 }
@@ -1369,37 +3313,42 @@
         }
 
         // --- GUI ---
-        const gui = new GUI();
-        
-        const cameraFolder = gui.addFolder('Camera');
-        cameraFolder.add(camera.position, 'x', -20, 20, 0.1).name('Camera X');
-        cameraFolder.add(camera.position, 'y', 2, 20, 0.1).name('Camera Y');
-        cameraFolder.add(camera.position, 'z', -20, 20, 0.1).name('Camera Z');
-        
-        const debugFolder = gui.addFolder('Debug');
-        debugFolder.add(debugState, 'showCannonWireframes').name('Cannon Wireframes');
-        debugFolder.add(debugState, 'showVisualWireframes').name('Visual Wireframe Mode');
-        
-        const roomSettings = {
-            showDebug: false,
-            ambientIntensity: ambientLight.intensity,
-            ceilingLightIntensity: mainCeilingLight.intensity,
-            bulbGlow: lightBulb.material.emissiveIntensity
-        };
-        const roomFolder = gui.addFolder('Room');
-        roomFolder.add(roomSettings, 'showDebug').name('Show Debug Grid/Axes').onChange((v)=>{
-            axes.visible = v;
-            grid.visible = v;
-        });
-        roomFolder.add(roomSettings, 'ambientIntensity', 0, 2, 0.01).name('Ambient Intensity').onChange((v)=>{
-            ambientLight.intensity = v;
-        });
-        roomFolder.add(roomSettings, 'ceilingLightIntensity', 0, 15, 0.1).name('Ceiling Light Intensity').onChange((v)=>{
-            mainCeilingLight.intensity = v;
-        });
-        roomFolder.add(roomSettings, 'bulbGlow', 0, 8, 0.1).name('Bulb Glow').onChange((v)=>{
-            lightBulb.material.emissiveIntensity = v;
-        });
+        if (gameMode === 'debug') {
+            const gui = new GUI();
+            
+            const cameraFolder = gui.addFolder('Camera');
+            cameraFolder.add(camera.position, 'x', -20, 20, 0.1).name('Camera X');
+            cameraFolder.add(camera.position, 'y', 2, 20, 0.1).name('Camera Y');
+            cameraFolder.add(camera.position, 'z', -20, 20, 0.1).name('Camera Z');
+            
+            const debugFolder = gui.addFolder('Debug');
+            debugFolder.add(debugState, 'showCannonWireframes').name('Cannon Wireframes');
+            debugFolder.add(debugState, 'showVisualWireframes').name('Visual Wireframe Mode');
+            debugFolder.add(debugState, 'showArcLine').name('Show Arc Line').onChange((v) => {
+                setArcDebugLinesVisible(v, v ? gameState.currentPlayer : null);
+            });
+            
+            const roomSettings = {
+                showDebug: false,
+                ambientIntensity: ambientLight.intensity,
+                ceilingLightIntensity: mainCeilingLight.intensity,
+                bulbGlow: lightBulb.material.emissiveIntensity
+            };
+            const roomFolder = gui.addFolder('Room');
+            roomFolder.add(roomSettings, 'showDebug').name('Show Debug Grid/Axes').onChange((v)=>{
+                axes.visible = v;
+                grid.visible = v;
+            });
+            roomFolder.add(roomSettings, 'ambientIntensity', 0, 2, 0.01).name('Ambient Intensity').onChange((v)=>{
+                ambientLight.intensity = v;
+            });
+            roomFolder.add(roomSettings, 'ceilingLightIntensity', 0, 15, 0.1).name('Ceiling Light Intensity').onChange((v)=>{
+                mainCeilingLight.intensity = v;
+            });
+            roomFolder.add(roomSettings, 'bulbGlow', 0, 8, 0.1).name('Bulb Glow').onChange((v)=>{
+                lightBulb.material.emissiveIntensity = v;
+            });
+        }
 
         // --- Animation Loop ---
         function animate() {
@@ -1411,11 +3360,27 @@
             updateCameraAnimation(timeNow);
             updateShuffleTweens(timeNow);
             
-            for (let sc of shoeCards) {
+            const allCards = getAllCardRefs();
+            for (let sc of allCards) {
                 if (!sc.body || !sc.body.world) continue;
+                
+                // Prevent tunneling below the intended stack height while keeping motion natural
+                if (sc.body.userData?.pileLock && sc.body.userData?.targetY !== undefined) {
+                    if (sc.body.position.y < sc.body.userData.targetY) {
+                        sc.body.position.y = sc.body.userData.targetY;
+                        if (sc.body.velocity.y < 0) sc.body.velocity.y = 0;
+                    }
+                }
+                
+                clampFaceUpTilt(sc);
                 sc.mesh.position.copy(sc.body.position);
                 sc.mesh.quaternion.copy(sc.body.quaternion);
+                setMeshBasePosition(sc.mesh);
             }
+
+            updateHoveredCard();
+            applyHoverOffsets();
+            applyAiOffsets();
             
             controls.update();
             renderer.render(scene, camera);
@@ -1430,12 +3395,52 @@
 
         // Start
         animate();
-        setTimeout(() => {
-            initializeShoe();
-            setTimeout(() => {
-                shuffleShoe(true);
-            }, st(600));
-        }, 0);
+        const sortHandButton = document.getElementById('sort-hand');
+        const playButton = document.getElementById('play-hand');
+        const passButton = document.getElementById('pass-hand');
+        sortHandButton.addEventListener('click', () => {
+            // In debug mode, sort current player's hand; in AI mode, only player 0
+            const controllablePlayer = gameMode === 'debug' ? gameState.currentPlayer : 0;
+            sortPlayerHand(controllablePlayer);
+        });
+        playButton.addEventListener('click', () => {
+            playSelectedCards();
+        });
+        passButton.addEventListener('click', () => {
+            passTurn();
+        });
+
+        // Game mode selection
+        window.selectGameMode = function(mode) {
+            try {
+                console.log('selectGameMode called with mode:', mode);
+                gameMode = mode;
+                const modal = document.getElementById('mode-selector-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                    console.log('Modal hidden');
+                } else {
+                    console.error('Modal element not found!');
+                    return;
+                }
+                console.log('Game mode set to:', mode);
+                
+                setTimeout(() => {
+                    try {
+                        console.log('Initializing shoe...');
+                        initializeShoe();
+                        setTimeout(() => {
+                            console.log('Starting shuffle...');
+                            shuffleShoe(true);
+                        }, st(600));
+                    } catch (err) {
+                        console.error('Error in initialization:', err);
+                    }
+                }, 0);
+            } catch (err) {
+                console.error('Error in selectGameMode:', err);
+            }
+        };
     </script>
 </body>
 </html>
