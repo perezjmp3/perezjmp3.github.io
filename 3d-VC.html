@@ -1448,6 +1448,90 @@
         let currentHandCards = [];
         let playStackCounter = 0;
 
+        function formatCardDebug(sc) {
+            if (!sc?.card) return 'unknown';
+            return `${sc.card.rank}${sc.card.suit}`;
+        }
+
+        function getCardsNearTrickArea(radius = 0.85, yTolerance = 1.5) {
+            const all = getAllCardRefs();
+            return all.filter((sc) => {
+                if (!sc?.mesh?.position) return false;
+                const dx = sc.mesh.position.x - TRICK_POS.x;
+                const dz = sc.mesh.position.z - TRICK_POS.z;
+                const horizontalDist = Math.hypot(dx, dz);
+                const verticalDist = Math.abs(sc.mesh.position.y - TRICK_POS.y);
+                return horizontalDist <= radius && verticalDist <= yTolerance;
+            });
+        }
+
+        function reportTrickCardError(reason, context, extra = {}) {
+            const nearCenter = getCardsNearTrickArea();
+            const summary = {
+                context,
+                reason,
+                trick: gameState.trick ? describePattern(gameState.trick) : 'none',
+                currentHandCount: currentHandCards.length,
+                activeHands: playerCards.map((h) => h.length),
+                currentPlayer: gameState.currentPlayer,
+                leadPlayer: gameState.leadPlayer,
+                lastPlayed: gameState.lastPlayed,
+                passed: Array.from(gameState.passed),
+                nearTrickCenterCount: nearCenter.length,
+                nearTrickCenterCards: nearCenter.map((sc) => ({
+                    card: formatCardDebug(sc),
+                    x: Number(sc.mesh.position.x.toFixed(3)),
+                    y: Number(sc.mesh.position.y.toFixed(3)),
+                    z: Number(sc.mesh.position.z.toFixed(3))
+                })),
+                ...extra
+            };
+            console.error('[TRICK CARD ERROR]', summary);
+        }
+
+        function verifyTrickCardsCleared(context, movedCards = []) {
+            const lingeringMoved = movedCards.filter((sc) => {
+                if (!sc?.mesh?.position) return false;
+                const dx = sc.mesh.position.x - TRICK_POS.x;
+                const dz = sc.mesh.position.z - TRICK_POS.z;
+                return Math.hypot(dx, dz) <= 0.85;
+            });
+
+            if (currentHandCards.length > 0 || lingeringMoved.length > 0) {
+                reportTrickCardError('Cards did not fully clear from table after clearTrickPile', context, {
+                    movedCardsCount: movedCards.length,
+                    lingeringMovedCards: lingeringMoved.map((sc) => formatCardDebug(sc))
+                });
+                
+                // RECOVERY: Forcibly move lingering cards to discard pile
+                if (lingeringMoved.length > 0) {
+                    console.log(`[CLEAR TRICK][RECOVERY] Forcibly moving ${lingeringMoved.length} lingering card(s) to discard...`);
+                    lingeringMoved.forEach((sc) => {
+                        sc.body.position.set(DISCARD_POS.x, DISCARD_POS.y, DISCARD_POS.z);
+                        sc.mesh.position.copy(sc.body.position);
+                        setMeshBasePosition(sc.mesh);
+                    });
+                }
+                
+                // Clear any remaining references
+                currentHandCards = currentHandCards.filter((sc) => {
+                    const dx = sc.mesh.position.x - TRICK_POS.x;
+                    const dz = sc.mesh.position.z - TRICK_POS.z;
+                    return Math.hypot(dx, dz) > 0.85;
+                });
+            } else {
+                console.log(`[CLEAR TRICK][VERIFY] OK (${context}) - all trick cards removed from center.`);
+            }
+        }
+
+        function checkOpenHandState(context) {
+            if (!gameState.trick && currentHandCards.length > 0) {
+                reportTrickCardError('Open hand started while currentHandCards is not empty', context, {
+                    likelyCause: 'State mismatch: trick reset or turn advanced before prior trick cards were cleared.'
+                });
+            }
+        }
+
         function setStatus(text) {
             if (statusEl) statusEl.textContent = text;
         }
@@ -2536,15 +2620,35 @@
             return Array.from(set);
         }
 
-        function clearTrickPile() {
+        function cancelActiveTweensOnCards(cardsToStop) {
+            // Remove any active tweens that are animating these specific cards
+            // This prevents tween conflicts when re-animating cards to new positions
+            const cardSet = new Set(cardsToStop);
+            for (let i = activeTweens.length - 1; i >= 0; i--) {
+                const twn = activeTweens[i];
+                if (cardSet.has(twn.sc)) {
+                    activeTweens.splice(i, 1);
+                }
+            }
+        }
+
+        function clearTrickPile(context = 'unknown') {
             console.log(`[CLEAR TRICK] Before: currentHandCards has ${currentHandCards.length} cards`);
             if (!currentHandCards.length) {
                 console.log(`[CLEAR TRICK] No cards to clear!`);
                 return;
             }
+            const movedCards = [...currentHandCards];
+            
+            // Cancel any active tweens on these cards to prevent animation conflicts
+            cancelActiveTweensOnCards(movedCards);
+            
             moveCardsToPile(currentHandCards, DISCARD_POS, null, { usePhysics: false, faceUp: false });
             currentHandCards = [];
             console.log(`[CLEAR TRICK] After: currentHandCards cleared`);
+            setTimeout(() => {
+                verifyTrickCardsCleared(context, movedCards);
+            }, st(360));
         }
 
         function nextActivePlayer(fromIndex) {
@@ -2557,6 +2661,19 @@
                 const idx = clockwiseOrder[pos];
                 // Skip players with no cards OR who have passed this trick
                 if (playerCards[idx].length > 0 && !gameState.passed.has(idx)) return idx;
+            }
+            return fromIndex;
+        }
+
+        function nextPlayerWithCards(fromIndex) {
+            const clockwiseOrder = [1, 0, 3, 2];
+            const total = clockwiseOrder.length;
+            let pos = clockwiseOrder.indexOf(fromIndex);
+            if (pos === -1) pos = 0;
+            for (let i = 0; i < total; i++) {
+                pos = (pos + 1) % total;
+                const idx = clockwiseOrder[pos];
+                if (playerCards[idx].length > 0) return idx;
             }
             return fromIndex;
         }
@@ -2635,7 +2752,6 @@
             gameState.trickPlayersCount = null;
             gameState.passed.clear();
             gameState.mustInclude3S = false;
-            currentHandCards = [];
             playStackCounter = 0;
             clearSelection();
 
@@ -2644,6 +2760,7 @@
             
             // Animate transition: collect cards, flip to face-down, move to center
             animateEndGameTransition(() => {
+                currentHandCards = [];
                 initializeShoe();
                 shuffleShoe(true);
             });
@@ -2651,21 +2768,32 @@
 
         function advanceTurn() {
             // First check: does the active trick need to end before we check for round-end?
-            // This ensures all players get a chance to play on someone's final card
-            // BUT: if trickPlayersCount <= 1, there's only one player left, so skip trick-ending logic
-            // and let that player get their turn (they'll either play or the game will end naturally)
-            if (gameState.trick && gameState.trickPlayersCount && gameState.trickPlayersCount > 1 && gameState.passed.size >= gameState.trickPlayersCount - 1) {
-                console.log(`[TRICK END] Clearing trick. Passed: ${gameState.passed.size}, Active: ${gameState.trickPlayersCount}`);
+            // Compute pass threshold from live state so players still get a response turn
+            // when the last-played player goes out.
+            if (gameState.trick) {
+                const activePlayersWithCards = playerCards
+                    .map((hand, idx) => ({ idx, hasCards: hand.length > 0 }))
+                    .filter((entry) => entry.hasCards)
+                    .map((entry) => entry.idx);
+                const activeResponders = gameState.lastPlayed === null
+                    ? activePlayersWithCards
+                    : activePlayersWithCards.filter((idx) => idx !== gameState.lastPlayed);
+                const activePassedCount = activeResponders.filter((idx) => gameState.passed.has(idx)).length;
+                const requiredPasses = activeResponders.length;
+
+                if (requiredPasses > 0 && activePassedCount >= requiredPasses) {
+                console.log(`[TRICK END] Clearing trick. Passed(responders): ${activePassedCount}, Required: ${requiredPasses}, ActiveWithCards: ${activePlayersWithCards.length}`);
+                console.log(`[TRICK END] Responders: [${activeResponders.join(', ')}], Passed: [${Array.from(gameState.passed).join(', ')}]`);
                 console.log(`[TRICK END] currentHandCards count: ${currentHandCards.length}`);
-                clearTrickPile();
+                clearTrickPile('advanceTurn:pass-threshold-reached');
                 gameState.trick = null;
                 gameState.trickPlayersCount = null;
                 gameState.passed.clear();
                 let nextLead = gameState.lastPlayed ?? gameState.leadPlayer;
                 if (playerCards[nextLead].length === 0) {
-                    console.log(`[TRICK END] Last played player ${nextLead} has no cards, finding next active`);
-                    nextLead = nextActivePlayer(nextLead);
-                    console.log(`[TRICK END] Next lead player: ${nextLead}`);
+                    console.log(`[TRICK END] Last played player ${nextLead} has no cards, finding next with cards`);
+                    nextLead = nextPlayerWithCards(nextLead);
+                    console.log(`[TRICK END] Next lead player (after out): ${nextLead}`);
                 }
                 gameState.currentPlayer = nextLead;
                 gameState.leadPlayer = gameState.currentPlayer;
@@ -2689,8 +2817,10 @@
                     }, st(1200));
                     return;
                 }
+                checkOpenHandState('advanceTurn:post-trick-end-before-status');
                 updateTurnStatus();
                 return;
+                }
             }
 
             // Second check: now see if the game/round has ended
@@ -2714,6 +2844,7 @@
             if (debugState.showArcLine) {
                 setArcDebugLinesVisible(true, gameState.currentPlayer);
             }
+            checkOpenHandState('advanceTurn:normal-turn-advance');
             updateTurnStatus();
         }
 
@@ -2734,6 +2865,14 @@
                     if (playerIndex === 0) setStatus('Selected cards do not beat the current hand.');
                     return false;
                 }
+            }
+
+            if (!gameState.trick && currentHandCards.length > 0) {
+                reportTrickCardError('Attempting to start a new hand while previous cards still tracked on table', 'playCardsForPlayer:pre-play-open-hand', {
+                    playerIndex,
+                    attemptedCards: cards.map((sc) => formatCardDebug(sc)),
+                    likelyCause: 'Previous trick may not have been cleared before opening a new hand.'
+                });
             }
 
             playerCards[playerIndex] = playerCards[playerIndex].filter((sc) => !cards.includes(sc));
