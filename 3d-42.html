@@ -1,0 +1,3410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D 42 - Justin M. Perez</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+            background: #1a1a1a;
+        }
+
+        #c {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+
+        nav a {
+            color: white;
+            margin-right: 14px;
+            text-decoration: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 14px;
+            border: none;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            background: rgba(255,255,255,0.25);
+            color: white;
+        }
+
+        .game-info {
+            position: fixed;
+            top: 60px;
+            left: 10px;
+            z-index: 100;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 320px;
+        }
+
+        .game-info h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+        }
+
+        #ai-overlay {
+            position: fixed;
+            top: 60px;
+            right: 10px;
+            z-index: 120;
+            max-width: 320px;
+            background: rgba(0,0,0,0.65);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.5;
+            backdrop-filter: blur(5px);
+        }
+
+        #stop-shake-btn {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(231, 76, 60, 0.85);
+            color: white;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: background 0.2s;
+        }
+
+        #stop-shake-btn:hover:not(:disabled) {
+            background: rgba(231, 76, 60, 1);
+        }
+
+        #stop-shake-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #bid-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            display: none;
+            gap: 8px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.55);
+            padding: 8px 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+
+        #bid-input {
+            width: 70px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 14px;
+            font-family: inherit;
+            text-align: center;
+        }
+
+        #bid-submit {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #bid-pass {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: rgba(231, 76, 60, 0.75);
+            color: white;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #bid-pass:hover {
+            background: rgba(231, 76, 60, 1);
+        }
+
+        #bid-submit:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        #bid-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #trump-controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            display: none;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+            padding: 8px 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            max-width: 520px;
+        }
+
+        .trump-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .trump-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="./index.html">Home</a>
+        <a href="./projects.html">Projects</a>
+        <a href="./resume.pdf" class="btn">Resume</a>
+    </nav>
+
+    <div class="game-info">
+        <h3>42 (3D Prototype)</h3>
+        <div id="game-status">Full double-six domino set is on the table. Click dominoes to select.</div>
+        <div style="margin-top: 12px; font-size: 12px; opacity: 0.85;">
+            <strong>Teams:</strong><br>
+            Team 1: You + Partner<br>
+            Team 2: Left (Opp) + Right (Opp)<br>
+            <br>
+            <strong>Players:</strong><br>
+            Front: You (Human)<br>
+            Right: AI Opponent<br>
+            Back: AI Partner<br>
+            Left: AI Opponent
+            <br><br>
+            <strong>Bids:</strong><br>
+            You: <span id="bid-p0">-</span><br>
+            Left: <span id="bid-p3">-</span><br>
+            Partner: <span id="bid-p2">-</span><br>
+            Right: <span id="bid-p1">-</span><br>
+            <br>
+            <strong>Trump:</strong> <span id="trump-display">-</span><br>
+            <strong>Trick:</strong><br>
+            You: <span id="trick-p0">-</span><br>
+            Left: <span id="trick-p3">-</span><br>
+            Partner: <span id="trick-p2">-</span><br>
+            Right: <span id="trick-p1">-</span><br>
+            <span id="trick-leader" style="font-size: 11px; opacity: 0.7; font-style: italic;"></span><br>
+            <br>
+            <strong>Hand [Marks]:</strong><br>
+            Team 1: <span id="points-team0">0 [0]</span><br>
+            Team 2: <span id="points-team1">0 [0]</span>
+        </div>
+    </div>
+
+    <div id="ai-overlay">AI reasoning will appear here.</div>
+
+    <canvas id="c"></canvas>
+    
+    <button id="stop-shake-btn" disabled>Stop Shaking</button>
+    <div id="bid-controls">
+        <input id="bid-input" type="number" min="30" max="42" placeholder="30-42" />
+        <button id="bid-submit">Bid</button>
+        <button id="bid-pass">Pass</button>
+    </div>
+    <div id="trump-controls">
+        <button class="trump-btn" data-trump="doubles">Doubles</button>
+        <button class="trump-btn" data-trump="0">Blanks</button>
+        <button class="trump-btn" data-trump="1">Ones</button>
+        <button class="trump-btn" data-trump="2">Twos</button>
+        <button class="trump-btn" data-trump="3">Threes</button>
+        <button class="trump-btn" data-trump="4">Fours</button>
+        <button class="trump-btn" data-trump="5">Fives</button>
+        <button class="trump-btn" data-trump="6">Sixes</button>
+    </div>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three/three.module.js",
+                "three/addons/": "./lib/three/"
+      }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/OrbitControls.js';
+        import RAPIER from 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js';
+
+        await RAPIER.init();
+
+        // --- Real-world scaling helpers (match VC card scale) ---
+        const TABLE_WIDTH_UNITS = 10.4;
+        const REAL_TABLE_WIDTH_M = 2.1;
+        const UNIT_IN_METERS = REAL_TABLE_WIDTH_M / TABLE_WIDTH_UNITS;
+
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(0, 6, 9);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: document.getElementById('c'),
+            antialias: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 2.2;
+        controls.maxDistance = 20;
+        controls.maxPolarAngle = Math.PI / 2.05;
+
+        const ambientLight = new THREE.AmbientLight(0xfff4e6, 0.9);
+        scene.add(ambientLight);
+
+        const world = new RAPIER.World({ x: 0, y: -9.82, z: 0 });
+
+        const roomGroup = new THREE.Group();
+        const ROOM = {
+            width: 24,
+            depth: 18,
+            height: 12,
+            wallThickness: 0.3,
+            floorY: -3.65,
+            ceilingY: 8.35
+        };
+
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0xc9b89a, roughness: 0.8, metalness: 0.0 });
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.85, metalness: 0.0 });
+        const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc8, roughness: 0.9, metalness: 0.0 });
+
+        const floor = new THREE.Mesh(new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth), floorMat);
+        floor.position.set(0, ROOM.floorY, 0);
+        floor.receiveShadow = true;
+        roomGroup.add(floor);
+
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(ROOM.width, 0.2, ROOM.depth), ceilingMat);
+        ceiling.position.set(0, ROOM.ceilingY, 0);
+        ceiling.receiveShadow = true;
+        roomGroup.add(ceiling);
+
+        function addWall(width, height, x, y, z, rotY = 0) {
+            const wall = new THREE.Mesh(
+                new THREE.BoxGeometry(width, height, ROOM.wallThickness),
+                wallMat
+            );
+            wall.position.set(x, y, z);
+            wall.rotation.y = rotY;
+            wall.receiveShadow = true;
+            wall.castShadow = true;
+            roomGroup.add(wall);
+        }
+
+        const wallY = ROOM.floorY + ROOM.height / 2 + 0.1;
+        addWall(ROOM.width, ROOM.height, 0, wallY, -ROOM.depth / 2, 0);
+        addWall(ROOM.depth, ROOM.height, -ROOM.width / 2, wallY, 0, Math.PI / 2);
+        addWall(ROOM.depth, ROOM.height, ROOM.width / 2, wallY, 0, Math.PI / 2);
+        addWall(ROOM.width * 0.25, ROOM.height, -ROOM.width / 2 + ROOM.width * 0.125, wallY, ROOM.depth / 2, 0);
+        addWall(ROOM.width * 0.25, ROOM.height, ROOM.width / 2 - ROOM.width * 0.125, wallY, ROOM.depth / 2, 0);
+
+        const ceilingLight = new THREE.SpotLight(0xfff4e6, 12, 40, Math.PI * 0.85, 0.25, 1.5);
+        ceilingLight.position.set(0, ROOM.ceilingY - 0.2, 0);
+        ceilingLight.castShadow = true;
+        ceilingLight.shadow.mapSize.width = 1024;
+        ceilingLight.shadow.mapSize.height = 1024;
+        ceilingLight.shadow.camera.near = 0.5;
+        ceilingLight.shadow.camera.far = 40;
+        ceilingLight.shadow.bias = -0.0001;
+        const lightTarget = new THREE.Object3D();
+        lightTarget.position.set(0, 0, 0);
+        scene.add(lightTarget);
+        ceilingLight.target = lightTarget;
+        roomGroup.add(ceilingLight);
+
+        const lightBulb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.3, 16, 12),
+            new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                emissive: 0xfff4e6,
+                emissiveIntensity: 4.5,
+                roughness: 0.2,
+                metalness: 0.1
+            })
+        );
+        lightBulb.position.set(0, ROOM.ceilingY - 0.45, 0);
+        roomGroup.add(lightBulb);
+
+        scene.add(roomGroup);
+
+        const tableGroup = new THREE.Group();
+        const TABLE = {
+            topRadius: 3.5,
+            topThickness: 0.24,
+            pedestalHeight: 3.6
+        };
+
+        TABLE.topY = 0;
+        TABLE.pedestalY = TABLE.topY - (TABLE.topThickness / 2) - (TABLE.pedestalHeight / 2);
+
+        const tableTop = new THREE.Mesh(
+            new THREE.CylinderGeometry(TABLE.topRadius, TABLE.topRadius, TABLE.topThickness, 64),
+            new THREE.MeshStandardMaterial({
+                color: 0x0b5b3d,
+                roughness: 0.85,
+                metalness: 0.03
+            })
+        );
+        tableTop.position.y = TABLE.topY;
+        tableTop.castShadow = true;
+        tableTop.receiveShadow = true;
+        tableGroup.add(tableTop);
+
+        const tableTrim = new THREE.Mesh(
+            new THREE.TorusGeometry(TABLE.topRadius + 0.04, 0.1, 18, 72),
+            new THREE.MeshStandardMaterial({ color: 0x6f4a2d, roughness: 0.5, metalness: 0.2 })
+        );
+        tableTrim.rotation.x = Math.PI / 2;
+        tableTrim.position.y = TABLE.topY + 0.01;
+        tableTrim.castShadow = true;
+        tableGroup.add(tableTrim);
+
+        const tablePedestal = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.35, 0.65, TABLE.pedestalHeight, 20),
+            new THREE.MeshStandardMaterial({ color: 0x5b3b1f, roughness: 0.65, metalness: 0.08 })
+        );
+        tablePedestal.position.y = TABLE.pedestalY;
+        tablePedestal.castShadow = true;
+        tablePedestal.receiveShadow = true;
+        tableGroup.add(tablePedestal);
+
+        const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+        const floorTopY = ROOM.floorY + 0.1;
+        const pedestalBottom = TABLE.pedestalY - TABLE.pedestalHeight / 2;
+        tableGroup.position.y = floorTopY - pedestalBottom;
+        const tableSurfaceY = tableGroup.position.y + TABLE.topY + TABLE.topThickness / 2;
+
+        dragPlane.constant = -tableSurfaceY;
+
+        scene.add(tableGroup);
+
+        const tableRigidBody = world.createRigidBody(
+            RAPIER.RigidBodyDesc.fixed().setTranslation(0, tableSurfaceY, 0)
+        );
+        world.createCollider(
+            RAPIER.ColliderDesc.cuboid(50, 0.02, 50)
+                .setTranslation(0, -0.02, 0)
+                .setFriction(0.5)
+                .setRestitution(0.05),
+            tableRigidBody
+        );
+
+        const dominoSetGroup = new THREE.Group();
+        scene.add(dominoSetGroup);
+
+        const DOMINO_REAL = { length: 0.0508, width: 0.0254, thickness: 0.009525 };
+        const DOMINO = {
+            length: DOMINO_REAL.length / UNIT_IN_METERS,
+            width: DOMINO_REAL.width / UNIT_IN_METERS,
+            height: DOMINO_REAL.thickness / UNIT_IN_METERS,
+            pipRadius: (DOMINO_REAL.width / UNIT_IN_METERS) * 0.095,
+            pipDepth: (DOMINO_REAL.thickness / UNIT_IN_METERS) * 0.18,
+            lineDepth: (DOMINO_REAL.length / UNIT_IN_METERS) * 0.012,
+            edgeRadius: (DOMINO_REAL.thickness / UNIT_IN_METERS) * 0.25
+        };
+
+        const GROOVE = {
+            halfWidth: DOMINO.length * 0.005,
+            depth: DOMINO.pipDepth * 0.38,
+            halfSpan: DOMINO.width * 0.42
+        };
+
+        const PIP_LAYOUT = {
+            x: (DOMINO.length * 0.5) * 0.28,
+            z: DOMINO.width * 0.28
+        };
+
+        const DOMINO_LAYOUT = {
+            columns: 7,
+            gapX: DOMINO.width,
+            gapZ: DOMINO.length
+        };
+
+        const dominoTopMat = new THREE.MeshStandardMaterial({ color: 0xf4f0df, roughness: 0.62, metalness: 0.05, vertexColors: true });
+        const dominoBottomMat = new THREE.MeshStandardMaterial({ color: 0xf4f0df, roughness: 0.62, metalness: 0.05, vertexColors: true });
+        const dominoSideMat = new THREE.MeshStandardMaterial({ color: 0xdfd7bf, roughness: 0.72, metalness: 0.03 });
+
+        const dominoes = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(-10, -10);
+        const dragOffset = new THREE.Vector3();
+        const dragTarget = new THREE.Vector3();
+        let activeDomino = null;
+        let isDragging = false;
+        let rightRotateHeld = false;
+        let lastDraggedDomino = null;
+        let rightPressedPrev = false;
+        const PICKUP_HEIGHT = 0.22;
+        const PICKUP_LERP = 0.35;
+        const DRAG_LERP = 0.28;
+        const ROTATE_LERP = 0.22;
+        const PLAY_ZONE_RADIUS = TABLE.topRadius * 0.22;
+        const DRAG_RISE_DURATION_MS = 150; // how fast domino rises on pickup
+
+        function easeOutCubic(t) {
+            t = Math.max(0, Math.min(1, t));
+            return 1 - Math.pow(1 - t, 3);
+        }
+
+        function pipLayout(value) {
+            const left = -PIP_LAYOUT.x;
+            const center = 0;
+            const right = PIP_LAYOUT.x;
+            const top = -PIP_LAYOUT.z;
+            const middle = 0;
+            const bottom = PIP_LAYOUT.z;
+
+            switch (value) {
+                case 0: return [];
+                case 1: return [[center, middle]];
+                case 2: return [[left, top], [right, bottom]];
+                case 3: return [[left, top], [center, middle], [right, bottom]];
+                case 4: return [[left, top], [right, top], [left, bottom], [right, bottom]];
+                case 5: return [[left, top], [right, top], [center, middle], [left, bottom], [right, bottom]];
+                case 6: return [[left, top], [right, top], [left, middle], [right, middle], [left, bottom], [right, bottom]];
+                default: return [];
+            }
+        }
+
+        function smoothstep(edge0, edge1, x) {
+            const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+            return t * t * (3 - 2 * t);
+        }
+
+        function buildPipCenters(a, b) {
+            const centers = [];
+            const leftSpots = pipLayout(a);
+            const rightSpots = pipLayout(b);
+            const leftOffset = -DOMINO.length * 0.25;
+            const rightOffset = DOMINO.length * 0.25;
+
+            for (const [x, z] of leftSpots) {
+                centers.push({ x: leftOffset + x, z });
+            }
+            for (const [x, z] of rightSpots) {
+                centers.push({ x: rightOffset + x, z });
+            }
+
+            return centers;
+        }
+
+        function createDominoGeometryWithDimples(a, b) {
+            const geometry = new THREE.BoxGeometry(
+                DOMINO.length,
+                DOMINO.height,
+                DOMINO.width,
+                240,
+                16,
+                120
+            );
+            const centers = buildPipCenters(a, b);
+            const pos = geometry.attributes.position;
+            const colors = new Float32Array(pos.count * 3);
+            const baseColor = { r: 0.96, g: 0.94, b: 0.88 };
+            const pipColor = { r: 0.08, g: 0.08, b: 0.08 };
+            const grooveColor = { r: 0.18, g: 0.18, b: 0.18 };
+
+            const halfSize = {
+                x: DOMINO.length / 2,
+                y: DOMINO.height / 2,
+                z: DOMINO.width / 2
+            };
+            const radius = Math.min(DOMINO.edgeRadius, halfSize.x, halfSize.y, halfSize.z);
+            const inner = {
+                x: Math.max(halfSize.x - radius, 0),
+                y: Math.max(halfSize.y - radius, 0),
+                z: Math.max(halfSize.z - radius, 0)
+            };
+
+            if (radius > 0) {
+                for (let i = 0; i < pos.count; i++) {
+                    const x = pos.getX(i);
+                    const y = pos.getY(i);
+                    const z = pos.getZ(i);
+
+                    const clampedX = Math.max(-inner.x, Math.min(inner.x, x));
+                    const clampedY = Math.max(-inner.y, Math.min(inner.y, y));
+                    const clampedZ = Math.max(-inner.z, Math.min(inner.z, z));
+
+                    const dx = x - clampedX;
+                    const dy = y - clampedY;
+                    const dz = z - clampedZ;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                    if (dist > 0) {
+                        const scale = radius / dist;
+                        pos.setX(i, clampedX + dx * scale);
+                        pos.setY(i, clampedY + dy * scale);
+                        pos.setZ(i, clampedZ + dz * scale);
+                    }
+                }
+            }
+
+            pos.needsUpdate = true;
+            geometry.computeVertexNormals();
+
+            const normals = geometry.attributes.normal;
+
+            for (let i = 0; i < pos.count; i++) {
+                const x = pos.getX(i);
+                const y = pos.getY(i);
+                const z = pos.getZ(i);
+                const ny = normals.getY(i);
+                let usePipColor = false;
+
+                const isTopFace = ny >= 0.6;
+                const onGroove = Math.abs(x) < GROOVE.halfWidth && Math.abs(z) < GROOVE.halfSpan;
+
+                if (isTopFace && !onGroove) {
+                    for (const center of centers) {
+                        const dx = x - center.x;
+                        const dz = z - center.z;
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+                        if (dist < DOMINO.pipRadius * 0.98) {
+                            usePipColor = true;
+                            break;
+                        }
+                    }
+                }
+
+                let newY = y;
+                if (onGroove && isTopFace) {
+                    const grooveFalloffX = 1 - smoothstep(0, GROOVE.halfWidth, Math.abs(x));
+                    const grooveFalloffZ = 1 - smoothstep(GROOVE.halfSpan * 0.85, GROOVE.halfSpan, Math.abs(z));
+                    const grooveFalloff = grooveFalloffX * grooveFalloffZ;
+                    newY = Math.min(newY, y - GROOVE.depth * grooveFalloff);
+                }
+                for (const center of centers) {
+                    const dx = x - center.x;
+                    const dz = z - center.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < DOMINO.pipRadius) {
+                        const falloff = 1 - smoothstep(DOMINO.pipRadius * 0.25, DOMINO.pipRadius, dist);
+                        if (isTopFace) {
+                            newY = Math.min(newY, y - DOMINO.pipDepth * falloff);
+                        }
+                    }
+                }
+
+                if (newY !== y) {
+                    pos.setY(i, newY);
+                }
+
+                const offset = i * 3;
+                const color = onGroove && isTopFace
+                    ? grooveColor
+                    : (usePipColor ? pipColor : baseColor);
+                colors[offset] = color.r;
+                colors[offset + 1] = color.g;
+                colors[offset + 2] = color.b;
+            }
+
+            pos.needsUpdate = true;
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.computeVertexNormals();
+            return geometry;
+        }
+
+        function createDominoMesh(a, b) {
+            const group = new THREE.Group();
+
+            const body = new THREE.Mesh(
+                createDominoGeometryWithDimples(a, b),
+                [dominoSideMat, dominoSideMat, dominoTopMat, dominoBottomMat, dominoSideMat, dominoSideMat]
+            );
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            group.userData.values = [a, b];
+            group.userData.isPicked = false;
+            group.userData.isDragging = false;
+            group.userData.isAnimating = false;
+            return group;
+        }
+
+        function createDominoBody(mesh, position, rotationY) {
+            const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(position.x, position.y, position.z);
+
+            const quat = new THREE.Quaternion();
+            quat.setFromEuler(new THREE.Euler(0, rotationY, 0));
+            bodyDesc.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w });
+
+            const body = world.createRigidBody(bodyDesc);
+
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(
+                DOMINO.length / 2,
+                DOMINO.height / 2,
+                DOMINO.width / 2
+            )
+                .setDensity(1800)
+                .setFriction(0.5)
+                .setRestitution(0.05);
+
+            const collider = world.createCollider(colliderDesc, body);
+
+            body.setLinearDamping(0.15);
+            body.setAngularDamping(0.2);
+            body.sleep();
+
+            return { body, collider };
+        }
+
+        function buildDoubleSixSet() {
+            const set = [];
+            for (let a = 0; a <= 6; a++) {
+                for (let b = a; b <= 6; b++) {
+                    set.push([a, b]);
+                }
+            }
+            return set;
+        }
+
+        function layoutDominoes() {
+            const gapX = DOMINO_LAYOUT.gapX;
+            const gapZ = DOMINO_LAYOUT.gapZ;
+            
+            // 4 rows with specific domino arrangement
+            const rows = [
+                [[0,0], [0,1], [0,2], [0,3], [0,4], [0,5], [0,6]],
+                [[1,1], [1,2], [1,3], [1,4], [1,5], [1,6], [2,2]],
+                [[2,3], [2,4], [2,5], [2,6], [3,3], [3,4], [3,5]],
+                [[3,6], [4,4], [4,5], [4,6], [5,5], [5,6], [6,6]]
+            ];
+            
+            // Use 7 columns for consistent spacing (all rows have 7 dominoes)
+            const maxCols = 7;
+            const startX = -((maxCols - 1) * gapX) / 2;
+            const startZ = -((rows.length - 1) * gapZ) / 2;
+            
+            rows.forEach((rowDominoes, rowIndex) => {
+                const rowZ = startZ + rowIndex * gapZ;
+                
+                rowDominoes.forEach(([a, b], colIndex) => {
+                    const domino = createDominoMesh(a, b);
+                    const rotationY = -Math.PI / 2;
+                    const position = new THREE.Vector3(
+                        startX + colIndex * gapX,
+                        tableSurfaceY + DOMINO.height / 2 + 0.001,
+                        rowZ
+                    );
+                    const { body, collider } = createDominoBody(domino, position, rotationY);
+                    domino.userData.body = body;
+                    domino.userData.collider = collider;
+                    domino.position.copy(position);
+                    const rot = body.rotation();
+                    domino.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                    
+                    // Store original position and rotation for reset
+                    domino.userData.originalPosition = position.clone();
+                    domino.userData.originalRotationY = rotationY;
+
+                    dominoSetGroup.add(domino);
+                    dominoes.push(domino);
+                });
+            });
+        }
+
+        layoutDominoes();
+
+        // Store all grid positions for shuffling
+        const gridPositions = dominoes.map(d => d.userData.originalPosition.clone());
+
+        // --- First Shake Logic ---
+        let firstShakePhase = 'initial'; // 'initial', 'shuffling', 'drawing', 'revealing', 'redrawing', 'complete'
+        let drawnDominoes = [null, null, null, null]; // One per player
+        let drawnDominoObjects = [null, null, null, null]; // The actual domino meshes
+        let canDrawDomino = false;
+        let allowPlayerInput = false; // Control whether player can interact with dominoes
+        let pendingHumanDeal = null;
+        let firstShakeTiedPlayers = []; // Track which players tied in first shake
+        let firstShakeDiscardPile = []; // Dominoes from players who didn't tie in current round
+        let isBidPhaseInput = false;
+        let isTrumpPhaseInput = false;
+        
+        // Shuffle control state
+        let shuffleCount = 0;
+        let isShuffling = false;
+        let shouldStopShuffling = false;
+        let aiShuffleTarget = 0; // Random target for AI to stop
+        const stopShakeBtn = document.getElementById('stop-shake-btn');
+        const bidControls = document.getElementById('bid-controls');
+        const bidInput = document.getElementById('bid-input');
+        const bidSubmit = document.getElementById('bid-submit');
+        const bidPass = document.getElementById('bid-pass');
+        const trumpControls = document.getElementById('trump-controls');
+        const aiOverlay = document.getElementById('ai-overlay');
+        const aiReasoningByPlayer = { 1: '', 2: '', 3: '' }; // Store reasoning for each AI player
+        
+        // Stop shake button handler
+        stopShakeBtn.addEventListener('click', () => {
+            if (shuffleCount >= 4 && isShuffling) {
+                shouldStopShuffling = true;
+                stopShakeBtn.disabled = true;
+                updateGameStatus('Stopping shuffle...');
+            }
+        });
+
+        function showBidControls(show) {
+            bidControls.style.display = show ? 'flex' : 'none';
+            if (show) {
+                bidInput.value = '';
+                bidInput.focus();
+            }
+        }
+
+        function showTrumpControls(show) {
+            trumpControls.style.display = show ? 'flex' : 'none';
+        }
+
+        function submitHumanBid() {
+            if (!isBidPhaseInput) return;
+            const raw = parseInt(bidInput.value, 10);
+            if (Number.isNaN(raw)) {
+                updateGameStatus('Enter a bid from 30 to 42 or type 0 to pass.');
+                return;
+            }
+
+            if (raw === 0) {
+                isBidPhaseInput = false;
+                showBidControls(false);
+                allowPlayerInput = false;
+                processBid(gameState.currentBidder, 'pass');
+                return;
+            }
+
+            if (raw < 30 || raw > 42) {
+                updateGameStatus('Bid must be between 30 and 42.');
+                return;
+            }
+
+            if (raw <= gameState.highBid) {
+                updateGameStatus(`Bid must be higher than ${gameState.highBid}.`);
+                return;
+            }
+
+            isBidPhaseInput = false;
+            showBidControls(false);
+            allowPlayerInput = false;
+            processBid(gameState.currentBidder, raw);
+        }
+
+        bidSubmit.addEventListener('click', submitHumanBid);
+        bidPass.addEventListener('click', () => {
+            if (!isBidPhaseInput) return;
+            isBidPhaseInput = false;
+            showBidControls(false);
+            allowPlayerInput = false;
+            processBid(gameState.currentBidder, 'pass');
+        });
+        bidInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                submitHumanBid();
+            }
+        });
+
+        trumpControls.addEventListener('click', (event) => {
+            const btn = event.target.closest('.trump-btn');
+            if (!btn || !isTrumpPhaseInput) return;
+            const value = btn.getAttribute('data-trump');
+            const trump = value === 'doubles' ? 'doubles' : parseInt(value, 10);
+            isTrumpPhaseInput = false;
+            showTrumpControls(false);
+            allowPlayerInput = false;
+            declareTrump(trump);
+        });
+
+        function getDominoPipTotal(domino) {
+            const [a, b] = domino.userData.values;
+            return a + b;
+        }
+
+        // Axis A: local long-side axis of a domino (length direction)
+        const DOMINO_AXIS_A_LOCAL = new THREE.Vector3(1, 0, 0);
+
+        // Axis B: local axis perpendicular to the two main large faces (width/thin direction)
+        const DOMINO_AXIS_B_LOCAL = new THREE.Vector3(0, 1, 0);
+
+        function getDominoAxisAWorld(domino) {
+            const body = domino.userData.body;
+            if (!body) return DOMINO_AXIS_A_LOCAL.clone();
+
+            const rot = body.rotation();
+            const quat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+            return DOMINO_AXIS_A_LOCAL.clone().applyQuaternion(quat).normalize();
+        }
+
+        function getDominoAxisBWorld(domino) {
+            const body = domino.userData.body;
+            if (!body) return DOMINO_AXIS_B_LOCAL.clone();
+
+            const rot = body.rotation();
+            const quat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+            return DOMINO_AXIS_B_LOCAL.clone().applyQuaternion(quat).normalize();
+        }
+
+        function animateDominoRotationTo(domino, targetQuat, duration, onComplete) {
+            const body = domino.userData.body;
+            if (!body) return;
+
+            domino.userData.isAnimating = true;
+            setDominoKinematic(domino, true);
+
+            const startTime = performance.now();
+            const startRot = body.rotation();
+            const startQuat = new THREE.Quaternion(startRot.x, startRot.y, startRot.z, startRot.w);
+
+            function animateStep() {
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                const currentQuat = new THREE.Quaternion();
+                currentQuat.slerpQuaternions(startQuat, targetQuat, eased);
+
+                body.setNextKinematicRotation(currentQuat);
+                body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateStep);
+                } else {
+                    domino.userData.isAnimating = false;
+                    if (onComplete) onComplete();
+                }
+            }
+
+            animateStep();
+        }
+
+        function setDominoRotationTarget(domino, targetQuat) {
+            domino.userData.rotationTargetQuat = targetQuat.clone();
+        }
+
+        function resetDominoToDistributedOrientation(domino) {
+            const targetQuat = domino.userData.distributedQuat;
+            if (!targetQuat) return;
+            animateDominoRotationTo(domino, targetQuat.clone(), 120);
+        }
+
+        function startDragRotate(domino) {
+            const body = domino.userData.body;
+            if (!body) return;
+
+            if (!domino.userData.dragRotateBaseQuat) {
+                const rot = body.rotation();
+                domino.userData.dragRotateBaseQuat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+            }
+
+            const baseQuat = domino.userData.dragRotateBaseQuat.clone();
+            const axisA = getDominoAxisAWorld(domino);
+            const rotQuat = new THREE.Quaternion().setFromAxisAngle(axisA, Math.PI / 2);
+            const targetQuat = rotQuat.multiply(baseQuat);
+
+            setDominoRotationTarget(domino, targetQuat);
+        }
+
+        function stopDragRotate(domino) {
+            const baseQuat = domino.userData.dragRotateBaseQuat;
+            if (!baseQuat) return;
+
+            setDominoRotationTarget(domino, baseQuat.clone());
+            delete domino.userData.dragRotateBaseQuat;
+        }
+
+        function updateDominoPickupPosition(domino) {
+            if (!domino || !domino.userData.body) return;
+            
+            const body = domino.userData.body;
+            const targetY = tableSurfaceY + DOMINO.height / 2 + PICKUP_HEIGHT;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const hit = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+                dragOffset.copy(hit).sub(domino.position);
+                dragTarget.copy(hit).sub(dragOffset);
+            }
+            
+            // Calculate rise animation progress
+            let yNow = targetY;
+            if (domino.userData.dragAnim) {
+                const now = performance.now();
+                const elapsed = now - domino.userData.dragAnim.startTime;
+                const duration = domino.userData.dragAnim.duration || DRAG_RISE_DURATION_MS;
+                const progress = elapsed / Math.max(1, duration);
+                const eased = easeOutCubic(progress);
+                yNow = domino.userData.dragAnim.startY + (targetY - domino.userData.dragAnim.startY) * eased;
+                if (progress >= 1) {
+                    domino.userData.dragAnim = null;
+                }
+            }
+            
+            const current = body.translation();
+            const desiredX = dragTarget.x;
+            const desiredZ = dragTarget.z;
+            
+            const next = {
+                x: current.x + (desiredX - current.x) * DRAG_LERP,
+                y: yNow,
+                z: current.z + (desiredZ - current.z) * DRAG_LERP
+            };
+            body.setNextKinematicTranslation(next);
+            domino.position.set(next.x, next.y, next.z);
+        }
+
+        function rotateDominoAboutAxisA(domino, angleRad) {
+            const body = domino.userData.body;
+            if (!body) return;
+
+            const rot = body.rotation();
+            const currentQuat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+            const axisA = getDominoAxisAWorld(domino);
+            const rotQuat = new THREE.Quaternion().setFromAxisAngle(axisA, angleRad);
+            const targetQuat = rotQuat.multiply(currentQuat);
+
+            setDominoRotationTarget(domino, targetQuat);
+        }
+
+        function setDominoKinematic(domino, isKinematic) {
+            const body = domino.userData.body;
+            if (!body) return;
+            
+            body.wakeUp(); // Wake up sleeping bodies before changing type
+            
+            if (isKinematic) {
+                body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+                body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+            } else {
+                body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+            }
+        }
+
+        function animateDominoFlip(domino, targetRotationX, duration, onComplete) {
+            const body = domino.userData.body;
+            if (!body) return;
+
+            domino.userData.isAnimating = true;
+            setDominoKinematic(domino, true);
+            
+            const startTime = performance.now();
+            const startRot = domino.rotation.clone();
+            const targetEuler = new THREE.Euler(targetRotationX, domino.rotation.y, domino.rotation.z);
+            const targetQuat = new THREE.Quaternion().setFromEuler(targetEuler);
+
+            function animateStep() {
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                const currentQuat = new THREE.Quaternion();
+                currentQuat.slerpQuaternions(
+                    new THREE.Quaternion().setFromEuler(startRot),
+                    targetQuat,
+                    eased
+                );
+
+                body.setNextKinematicRotation(currentQuat);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateStep);
+                } else {
+                    domino.userData.isAnimating = false;
+                    if (onComplete) onComplete();
+                }
+            }
+
+            animateStep();
+        }
+
+        function animateDominoToPosition(domino, targetPos, targetRotationY, duration, onComplete, preserveRotationX = false) {
+            const body = domino.userData.body;
+            if (!body) return;
+
+            domino.userData.isAnimating = true;
+            setDominoKinematic(domino, true);
+
+            const startTime = performance.now();
+            const startPos = body.translation();
+            const startQuat = body.rotation();
+            
+            // Preserve current X rotation if needed (for face-down state)
+            const currentEuler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(startQuat.x, startQuat.y, startQuat.z, startQuat.w));
+            const targetEuler = new THREE.Euler(
+                preserveRotationX ? Math.PI : 0,
+                targetRotationY,
+                0
+            );
+            const targetQuat = new THREE.Quaternion().setFromEuler(targetEuler);
+
+            function animateStep() {
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                const currentPos = {
+                    x: startPos.x + (targetPos.x - startPos.x) * eased,
+                    y: startPos.y + (targetPos.y - startPos.y) * eased,
+                    z: startPos.z + (targetPos.z - startPos.z) * eased
+                };
+
+                // For preserving rotation, don't interpolate - just use target quaternion directly
+                const currentQuat = preserveRotationX ? targetQuat : new THREE.Quaternion();
+                if (!preserveRotationX) {
+                    currentQuat.slerpQuaternions(
+                        new THREE.Quaternion(startQuat.x, startQuat.y, startQuat.z, startQuat.w),
+                        targetQuat,
+                        eased
+                    );
+                }
+
+                body.setNextKinematicTranslation(currentPos);
+                body.setNextKinematicRotation(currentQuat);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateStep);
+                } else {
+                    domino.userData.isAnimating = false;
+                    if (onComplete) onComplete();
+                }
+            }
+
+            animateStep();
+        }
+
+        function animateDominoWithRotation(domino, targetPos, targetQuat, duration, onComplete) {
+            const body = domino.userData.body;
+            if (!body) return;
+
+            domino.userData.isAnimating = true;
+            setDominoKinematic(domino, true);
+
+            const startTime = performance.now();
+            const startPos = body.translation();
+            const startQuat = body.rotation();
+
+            function animateStep() {
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                const currentPos = {
+                    x: startPos.x + (targetPos.x - startPos.x) * eased,
+                    y: startPos.y + (targetPos.y - startPos.y) * eased,
+                    z: startPos.z + (targetPos.z - startPos.z) * eased
+                };
+
+                const currentQuat = new THREE.Quaternion();
+                currentQuat.slerpQuaternions(
+                    new THREE.Quaternion(startQuat.x, startQuat.y, startQuat.z, startQuat.w),
+                    targetQuat,
+                    eased
+                );
+
+                body.setNextKinematicTranslation(currentPos);
+                body.setNextKinematicRotation(currentQuat);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateStep);
+                } else {
+                    domino.userData.isAnimating = false;
+                    if (onComplete) onComplete();
+                }
+            }
+
+            animateStep();
+        }
+
+        function animateInitialShuffle() {
+            updateGameStatus('Shuffling dominoes...');
+            firstShakePhase = 'shuffling';
+            allowPlayerInput = false;
+
+            // Step 1: Raise all dominoes
+            let raiseCompleted = 0;
+            let flipCompleted = 0;
+            let lowerCompleted = 0;
+            const raiseHeight = tableSurfaceY + DOMINO.height / 2 + 0.15;
+            
+            dominoes.forEach((domino, index) => {
+                setTimeout(() => {
+                    const origPos = domino.userData.originalPosition;
+                    const origRotY = domino.userData.originalRotationY;
+                    
+                    // Step 1: Raise
+                    animateDominoToPosition(
+                        domino,
+                        { x: origPos.x, y: raiseHeight, z: origPos.z },
+                        origRotY,
+                        300,
+                        () => {
+                            raiseCompleted++;
+                            // Step 2: Flip face down (rotate around X axis)
+                            animateDominoFlip(domino, Math.PI, 400, () => {
+                                flipCompleted++;
+                                // Step 3: Lower back to original position
+                                animateDominoToPosition(
+                                    domino,
+                                    { x: origPos.x, y: origPos.y, z: origPos.z },
+                                    origRotY,
+                                    300,
+                                    () => {
+                                        lowerCompleted++;
+                                        if (lowerCompleted === dominoes.length) {
+                                            shuffleDominoes();
+                                        }
+                                    },
+                                    true // Preserve the face-down rotation
+                                );
+                            });
+                        },
+                        false
+                    );
+                }, index * 30);
+            });
+        }
+
+        function shuffleDominoes() {
+            if (!isShuffling) {
+                // First call - initialize shuffle
+                isShuffling = true;
+                shuffleCount = 0;
+                shouldStopShuffling = false;
+                
+                // Check if this is actual game shake (not first shake)
+                const isGameShake = gameState.phase === 'shake';
+                const isAiShaker = isGameShake && playerPositions[gameState.shaker].isAI;
+                
+                // Show button if human is shaking in actual game
+                if (isGameShake && !isAiShaker) {
+                    stopShakeBtn.style.display = 'block';
+                    stopShakeBtn.disabled = true;
+                } else {
+                    stopShakeBtn.style.display = 'none';
+                }
+                
+                // Set AI shuffle target (4-10 shuffles for game, or 4 for first shake)
+                if (isAiShaker) {
+                    aiShuffleTarget = 4 + Math.floor(Math.random() * 7); // 4 to 10
+                } else if (!isGameShake) {
+                    aiShuffleTarget = 4; // First shake always 4 rounds
+                }
+            }
+            
+            shuffleCount++;
+            updateGameStatus(`Shuffling dominoes... (shuffle ${shuffleCount})`);
+            
+            // Enable stop button after 4 shuffles for human in actual game
+            if (shuffleCount === 4 && gameState.phase === 'shake' && !playerPositions[gameState.shaker].isAI) {
+                stopShakeBtn.disabled = false;
+            }
+            
+            // Check if should stop shuffling
+            if (gameState.phase !== 'shake' && shuffleCount >= aiShuffleTarget) {
+                shouldStopShuffling = true; // First shake
+            } else if (gameState.phase === 'shake' && playerPositions[gameState.shaker].isAI && shuffleCount >= aiShuffleTarget) {
+                shouldStopShuffling = true; // AI shake
+            }
+            
+            // Get current positions and rotations for ALL dominoes
+            const dominoStates = dominoes.map(domino => {
+                const body = domino.userData.body;
+                const pos = body.translation();
+                const rotQuat = body.rotation();
+                const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rotQuat.x, rotQuat.y, rotQuat.z, rotQuat.w));
+                return { domino, pos, rotY: euler.y };
+            });
+            
+            // Create shuffled target positions
+            const targetPositions = dominoStates.map(s => ({ x: s.pos.x, y: s.pos.y, z: s.pos.z }));
+            // Shuffle target positions randomly
+            for (let i = targetPositions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [targetPositions[i], targetPositions[j]] = [targetPositions[j], targetPositions[i]];
+            }
+            
+            let swapCompleted = 0;
+            const basePickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.3;
+            const riseDuration = 100;
+            const hoverDuration = 180;
+            const lowerDuration = 200;
+            const settleDuration = 150; // Extra time to settle after lowering
+            
+            // Animate ALL dominoes simultaneously at different heights
+            dominoStates.forEach((state, idx) => {
+                const { domino, pos, rotY } = state;
+                const targetPos = targetPositions[idx];
+                // Each domino at a different height to avoid collisions - create multi-layered effect
+                const heightLayer = idx % 7; // 7 layers for 28 dominoes (4 per layer)
+                const pickupHeight = basePickupHeight + (heightLayer * (DOMINO.height + 0.03));
+                
+                // Step 1: Rise UP vertically
+                animateDominoToPosition(
+                    domino,
+                    { x: pos.x, y: pickupHeight, z: pos.z },
+                    rotY,
+                    riseDuration,
+                    () => {
+                        // Step 2: Hover to new position
+                        animateDominoToPosition(
+                            domino,
+                            { x: targetPos.x, y: pickupHeight, z: targetPos.z },
+                            rotY,
+                            hoverDuration,
+                            () => {
+                                // Step 3: Lower DOWN into new position
+                                animateDominoToPosition(
+                                    domino,
+                                    { x: targetPos.x, y: tableSurfaceY + DOMINO.height / 2 + 0.001, z: targetPos.z },
+                                    rotY,
+                                    lowerDuration,
+                                    () => {
+                                        swapCompleted++;
+                                        if (swapCompleted === dominoes.length) {
+                                            // One shuffle round complete
+                                            setTimeout(() => {
+                                                // Check if should continue shuffling
+                                                if (!shouldStopShuffling) {
+                                                    // Continue shuffling
+                                                    shuffleDominoes();
+                                                } else {
+                                                    // Stop shuffling
+                                                    isShuffling = false;
+                                                    stopShakeBtn.style.display = 'none';
+                                                    
+                                                    // Check if this is first shake or actual game
+                                                    if (gameState.phase === 'shake') {
+                                                        // Actual game shuffle complete
+                                                        onShuffleComplete();
+                                                    } else {
+                                                        // First shake shuffle complete
+                                                        firstShakePhase = 'drawing';
+                                                        canDrawDomino = true;
+                                                        allowPlayerInput = true;
+                                                        updateGameStatus('Click a domino to draw it.');
+                                                    }
+                                                }
+                                            }, settleDuration);
+                                        }
+                                    },
+                                    true // Preserve face-down X rotation
+                                );
+                            },
+                            true // Preserve face-down X rotation
+                        );
+                    },
+                    true // Preserve face-down X rotation
+                );
+            });
+        }
+
+        function drawDominoForPlayer(domino, playerIndex) {
+            if (!domino) return;
+
+            drawnDominoes[playerIndex] = getDominoPipTotal(domino);
+            drawnDominoObjects[playerIndex] = domino;
+            
+            // Disable player input during animations
+            if (playerIndex === 0) {
+                canDrawDomino = false;
+                allowPlayerInput = false;
+                updateGameStatus('Drawing domino...');
+            }
+            
+            const pos = playerPositions[playerIndex];
+            const drawPos = {
+                x: pos.x * 0.8,
+                y: tableSurfaceY + DOMINO.height / 2 + 0.05,
+                z: pos.z * 0.8
+            };
+
+            // 3-step animation: rise → move → lower
+            const body = domino.userData.body;
+            const startPos = body.translation();
+            const rotQuat = body.rotation();
+            const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rotQuat.x, rotQuat.y, rotQuat.z, rotQuat.w));
+            const pickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.3;
+            
+            // Store original position to return to after first shake
+            domino.userData.drawnFromPosition = { x: startPos.x, y: startPos.y, z: startPos.z };
+            domino.userData.drawnFromRotationY = euler.y;
+            
+            // Step 1: Rise UP
+            animateDominoToPosition(
+                domino,
+                { x: startPos.x, y: pickupHeight, z: startPos.z },
+                euler.y,
+                120,
+                () => {
+                    // Step 2: Move horizontally to draw position
+                    animateDominoToPosition(
+                        domino,
+                        { x: drawPos.x, y: pickupHeight, z: drawPos.z },
+                        0,
+                        200,
+                        () => {
+                            // Step 3: Lower DOWN
+                            animateDominoToPosition(
+                                domino,
+                                drawPos,
+                                0,
+                                180,
+                                () => {
+                                    // Check if all relevant players have drawn
+                                    const allDrawnCheck = firstShakePhase === 'redrawing' 
+                                        ? firstShakeTiedPlayers.every(idx => drawnDominoObjects[idx] !== null)
+                                        : drawnDominoObjects.every(d => d !== null);
+                                    
+                                    if (allDrawnCheck) {
+                                        setTimeout(() => revealDrawnDominoes(), 800);
+                                    } else {
+                                        // Find next player who needs to draw
+                                        let nextPlayer = -1;
+                                        if (firstShakePhase === 'redrawing') {
+                                            nextPlayer = firstShakeTiedPlayers.find(idx => drawnDominoObjects[idx] === null);
+                                        } else {
+                                            nextPlayer = drawnDominoObjects.findIndex(d => d === null);
+                                        }
+                                        
+                                        if (nextPlayer !== -1 && playerPositions[nextPlayer].isAI) {
+                                            updateGameStatus(`${playerPositions[nextPlayer].name} ${firstShakePhase === 'redrawing' ? 'redrawing' : 'drawing'}...`);
+                                            setTimeout(() => aiDrawDomino(nextPlayer), 600);
+                                        } else if (nextPlayer === 0) {
+                                            canDrawDomino = true;
+                                            allowPlayerInput = true;
+                                            updateGameStatus('Click a domino to ' + (firstShakePhase === 'redrawing' ? 'redraw' : 'draw') + '.');
+                                        }
+                                    }
+                                },
+                                true
+                            );
+                        },
+                        true
+                    );
+                },
+                true
+            ); // Keep face-down while drawing
+        }
+
+        function aiDrawDomino(playerIndex) {
+            // Pick a random available domino (excluding already drawn and those in discard pile)
+            const available = dominoes.filter(d => 
+                !drawnDominoObjects.includes(d) && 
+                !firstShakeDiscardPile.includes(d)
+            );
+            if (available.length === 0) return;
+
+            const randomDomino = available[Math.floor(Math.random() * available.length)];
+            drawDominoForPlayer(randomDomino, playerIndex);
+        }
+
+        function revealDrawnDominoes() {
+            updateGameStatus('Revealing drawn dominoes...');
+            firstShakePhase = 'revealing';
+            allowPlayerInput = false;
+
+            let completed = 0;
+            
+            // In redraw phase, only reveal the tied players' dominoes
+            // In initial phase, reveal all dominoes
+            const dominoesToReveal = firstShakeTiedPlayers.length > 0
+                ? firstShakeTiedPlayers.map(idx => drawnDominoObjects[idx]).filter(d => d !== null)
+                : drawnDominoObjects.filter(d => d !== null);
+            
+            const totalToReveal = dominoesToReveal.length;
+
+            dominoesToReveal.forEach((domino) => {
+                if (domino) {
+                    animateDominoFlip(domino, 0, 500, () => {
+                        completed++;
+                        if (completed === totalToReveal) {
+                            setTimeout(() => determineFirstShaker(), 1000);
+                        }
+                    });
+                }
+            });
+        }
+
+        function determineFirstShaker() {
+            const maxPips = Math.max(...drawnDominoes.filter(v => v !== null));
+            const winners = drawnDominoes.map((pips, idx) => pips === maxPips ? idx : -1).filter(idx => idx !== -1);
+
+            if (winners.length === 1) {
+                const winnerIndex = winners[0];
+                updateGameStatus(`${playerPositions[winnerIndex].name} wins first shake with ${maxPips} pips!`);
+                firstShakePhase = 'complete';
+                
+                // Set this player as the first shaker/dealer
+                gameState.shaker = winnerIndex;
+                
+                // Return all drawn dominoes to pool and prepare for actual game
+                setTimeout(() => {
+                    updateGameStatus('Returning dominoes and starting game...');
+                    returnAllDrawnDominoes(() => {
+                        // Reset first shake variables
+                        drawnDominoes = [null, null, null, null];
+                        drawnDominoObjects = [null, null, null, null];
+                        firstShakeTiedPlayers = [];
+                        firstShakeDiscardPile = [];
+                        
+                        // Start the actual game
+                        setTimeout(() => startHand(), 1000);
+                    });
+                }, 2000);
+            } else {
+                // Tie - only tied players redraw
+                firstShakeTiedPlayers = winners;
+                const tieNames = winners.map(idx => playerPositions[idx].name).join(', ');
+                updateGameStatus(`Tie between ${tieNames} (${maxPips} pips each). Only tied players redraw...`);
+                
+                setTimeout(() => {
+                    // Put non-tied dominoes in discard pile and tied dominoes back in the grid
+                    returnTiedDominoes(() => {
+                        // Reset only the tied players' drawn values
+                        firstShakeTiedPlayers.forEach(idx => {
+                            drawnDominoes[idx] = null;
+                            drawnDominoObjects[idx] = null;
+                        });
+                        
+                        // Start redraw phase
+                        firstShakePhase = 'redrawing';
+                        canDrawDomino = firstShakeTiedPlayers.includes(0);
+                        allowPlayerInput = firstShakeTiedPlayers.includes(0);
+                        
+                        if (firstShakeTiedPlayers.includes(0)) {
+                            updateGameStatus('Click a domino to redraw.');
+                        } else {
+                            // AI draws first if player isn't tied
+                            const nextAIPlayer = firstShakeTiedPlayers.find(idx => playerPositions[idx].isAI);
+                            if (nextAIPlayer !== undefined) {
+                                updateGameStatus(`${playerPositions[nextAIPlayer].name} redrawing...`);
+                                setTimeout(() => aiDrawDomino(nextAIPlayer), 600);
+                            }
+                        }
+                    });
+                }, 2000);
+            }
+        }
+
+        function returnTiedDominoes(onComplete) {
+            let completed = 0;
+            
+            // Only process tied players - return their dominoes to grid
+            const tiesToReturn = firstShakeTiedPlayers.map(idx => drawnDominoObjects[idx]).filter(d => d !== null);
+            const total = tiesToReturn.length;
+
+            tiesToReturn.forEach((domino) => {
+                // Flip back face down
+                animateDominoFlip(domino, Math.PI, 300, () => {
+                    // 3-step animation: rise → move → lower
+                    const body = domino.userData.body;
+                    const startPos = body.translation();
+                    const pickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.3;
+                    
+                    // Return to original position where it was drawn from
+                    const returnPos = domino.userData.drawnFromPosition;
+                    const returnRotY = domino.userData.drawnFromRotationY;
+
+                    // Step 1: Rise UP
+                    animateDominoToPosition(
+                        domino,
+                        { x: startPos.x, y: pickupHeight, z: startPos.z },
+                        returnRotY,
+                        120,
+                        () => {
+                            // Step 2: Move back to original position
+                            animateDominoToPosition(
+                                domino,
+                                { x: returnPos.x, y: pickupHeight, z: returnPos.z },
+                                returnRotY,
+                                200,
+                                () => {
+                                    // Step 3: Lower DOWN
+                                    animateDominoToPosition(
+                                        domino,
+                                        { x: returnPos.x, y: returnPos.y, z: returnPos.z },
+                                        returnRotY,
+                                        180,
+                                        () => {
+                                            // Clean up stored position data
+                                            delete domino.userData.drawnFromPosition;
+                                            delete domino.userData.drawnFromRotationY;
+                                            
+                                            completed++;
+                                            if (completed === total && onComplete) {
+                                                onComplete();
+                                            }
+                                        },
+                                        true
+                                    );
+                                },
+                                true
+                            );
+                        },
+                        true
+                    );
+                });
+            });
+
+            // Non-tied dominoes go to discard pile (keep them aside, don't need animation)
+            firstShakeTiedPlayers.forEach((idx) => {
+                // We're NOT returning these dominoes, just updating the discard pile array
+                if (drawnDominoObjects[idx] !== null) {
+                    firstShakeDiscardPile.push(drawnDominoObjects[idx]);
+                }
+            });
+
+            if (total === 0 && onComplete) {
+                onComplete();
+            }
+        }
+
+        function returnAllDrawnDominoes(onComplete) {
+            let completed = 0;
+            const total = drawnDominoObjects.filter(d => d !== null).length;
+
+            drawnDominoObjects.forEach((domino, index) => {
+                if (domino) {
+                    // Flip back face down
+                    animateDominoFlip(domino, Math.PI, 300, () => {
+                        // 3-step animation: rise → move → lower
+                        const body = domino.userData.body;
+                        const startPos = body.translation();
+                        const pickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.3;
+                        
+                        // Return to original position where it was drawn from
+                        const returnPos = domino.userData.drawnFromPosition;
+                        const returnRotY = domino.userData.drawnFromRotationY;
+
+                        // Step 1: Rise UP
+                        animateDominoToPosition(
+                            domino,
+                            { x: startPos.x, y: pickupHeight, z: startPos.z },
+                            returnRotY,
+                            120,
+                            () => {
+                                // Step 2: Move back to original position
+                                animateDominoToPosition(
+                                    domino,
+                                    { x: returnPos.x, y: pickupHeight, z: returnPos.z },
+                                    returnRotY,
+                                    200,
+                                    () => {
+                                        // Step 3: Lower DOWN
+                                        animateDominoToPosition(
+                                            domino,
+                                            { x: returnPos.x, y: returnPos.y, z: returnPos.z },
+                                            returnRotY,
+                                            180,
+                                            () => {
+                                                // Clean up stored position data
+                                                delete domino.userData.drawnFromPosition;
+                                                delete domino.userData.drawnFromRotationY;
+                                                
+                                                completed++;
+                                                if (completed === total && onComplete) {
+                                                    onComplete();
+                                                }
+                                            },
+                                            true
+                                        );
+                                    },
+                                    true
+                                );
+                            },
+                            true
+                        );
+                    });
+                }
+            });
+
+            if (total === 0 && onComplete) {
+                onComplete();
+            }
+        }
+
+        function animateDominoesToGridRandom(onComplete) {
+            const shuffledGrid = gridPositions.map(p => p.clone());
+            for (let i = shuffledGrid.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledGrid[i], shuffledGrid[j]] = [shuffledGrid[j], shuffledGrid[i]];
+            }
+
+            let completed = 0;
+            const total = dominoes.length;
+            const basePickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.35;
+            const riseDuration = 120;
+            const moveDuration = 220;
+            const lowerDuration = 180;
+
+            dominoes.forEach((domino, idx) => {
+                const body = domino.userData.body;
+                const startPos = body.translation();
+                const targetPos = shuffledGrid[idx];
+                const pickupHeight = basePickupHeight + (idx % 6) * (DOMINO.height + 0.03);
+
+                // Face-down orientation while regrouping to grid
+                const targetEuler = new THREE.Euler(Math.PI, -Math.PI / 2, 0);
+                const targetQuat = new THREE.Quaternion().setFromEuler(targetEuler);
+
+                animateDominoWithRotation(
+                    domino,
+                    { x: startPos.x, y: pickupHeight, z: startPos.z },
+                    targetQuat,
+                    riseDuration,
+                    () => {
+                        animateDominoWithRotation(
+                            domino,
+                            { x: targetPos.x, y: pickupHeight, z: targetPos.z },
+                            targetQuat,
+                            moveDuration,
+                            () => {
+                                animateDominoWithRotation(
+                                    domino,
+                                    { x: targetPos.x, y: tableSurfaceY + DOMINO.height / 2 + 0.001, z: targetPos.z },
+                                    targetQuat,
+                                    lowerDuration,
+                                    () => {
+                                        completed++;
+                                        if (completed === total && onComplete) {
+                                            onComplete();
+                                        }
+                                    }
+                                );
+                            }
+                        );
+                    }
+                );
+            });
+        }
+
+        // ===== GAME FLOW FUNCTIONS =====
+
+        function startHand() {
+            updateGameStatus(`${playerPositions[gameState.shaker].name} is shaking...`);
+            
+            // Reset hand state
+            playerHands.forEach(hand => hand.length = 0);
+            gameState.phase = 'shake';
+            gameState.bids = [null, null, null, null];
+            gameState.highBid = 0;
+            gameState.highBidder = -1;
+            gameState.bidsPassed = 0;
+            gameState.trump = null;
+            gameState.currentTrick = [];
+            gameState.trickNumber = 0;
+            gameState.tricks = [[], []];
+            gameState.playerVoidBySuit = Array.from({ length: 4 }, () => new Array(8).fill(false));
+            gameState.playerTricksWon = [0, 0, 0, 0];
+            gameState.teamBidPoints = [0, 0];
+            updateInfoPanel();
+            
+            // Shuffle all dominoes
+            setTimeout(() => {
+                shuffleDominoes();
+            }, 1000);
+        }
+
+        function onShuffleComplete() {
+            // Called after shuffle completes - start dealing
+            gameState.phase = 'draw';
+            updateGameStatus('Dealing dominoes...');
+            
+            setTimeout(() => dealDominoes(), 500);
+        }
+
+        function dealDominoes() {
+            // Texas Friendly Method:
+            // Opponents of dealer draw first (2 players)
+            // Partner of dealer draws next
+            // Dealer takes remaining 7
+            
+            const dealer = gameState.shaker;
+            const teammate = getTeammate(dealer);
+            
+            // Determine draw order
+            const opponents = [0, 1, 2, 3].filter(p => p !== dealer && p !== teammate);
+            const drawOrder = [...opponents, teammate, dealer];
+            
+            let dominoIndex = 0;
+            let playerDrawIndex = 0;
+            
+            function drawNextDomino() {
+                if (playerDrawIndex >= drawOrder.length) {
+                    // All players have drawn their 7 dominoes
+                    onDrawComplete();
+                    return;
+                }
+                
+                const playerIndex = drawOrder[playerDrawIndex];
+                const hand = playerHands[playerIndex];
+                
+                if (hand.length >= 7) {
+                    // This player has 7 dominoes, move to next player
+                    playerDrawIndex++;
+                    setTimeout(() => drawNextDomino(), 300);
+                    return;
+                }
+                
+                // Find an available domino (not yet in any hand)
+                const availableDominoes = dominoes.filter(d => {
+                    return !playerHands.some(h => h.includes(d));
+                });
+                
+                if (availableDominoes.length === 0 || dominoIndex >= 28) {
+                    // Should not happen, but safety check
+                    onDrawComplete();
+                    return;
+                }
+                
+                if (playerIndex === 0) {
+                    // Human player manually picks a domino
+                    allowPlayerInput = true;
+                    pendingHumanDeal = { playerIndex, hand };
+                    updateGameStatus('Pick a domino from the pile.');
+                    return;
+                }
+
+                // AI draws a random domino
+                const randomIndex = Math.floor(Math.random() * availableDominoes.length);
+                const domino = availableDominoes[randomIndex];
+                hand.push(domino);
+                
+                // Animate domino moving to player's hand area
+                animateDominoToPlayerHand(domino, playerIndex, () => {
+                    drawNextDomino();
+                });
+            }
+            
+            dealDominoesResume = drawNextDomino;
+            drawNextDomino();
+        }
+
+        function isDominoAvailableForDeal(domino) {
+            return !playerHands.some(hand => hand.includes(domino));
+        }
+
+        function handleHumanDealPick(domino) {
+            if (!pendingHumanDeal) return;
+            if (!isDominoAvailableForDeal(domino)) return;
+
+            const { playerIndex, hand } = pendingHumanDeal;
+            pendingHumanDeal = null;
+            allowPlayerInput = false;
+
+            hand.push(domino);
+            animateDominoToPlayerHand(domino, playerIndex, () => {
+                dealDominoesResume();
+            });
+        }
+
+        let dealDominoesResume = () => {};
+
+        function animateDominoToPlayerHand(domino, playerIndex, onComplete) {
+            const body = domino.userData.body;
+            const startPos = body.translation();
+            const rotQuat = body.rotation();
+            const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rotQuat.x, rotQuat.y, rotQuat.z, rotQuat.w));
+            
+            const pos = playerPositions[playerIndex];
+            const handIndex = playerHands[playerIndex].length - 1; // Just added, so length-1
+            const handSpacing = DOMINO.length * 1.2;
+            const handOffset = (handIndex - 3) * handSpacing; // Center around 3.5
+            
+            // Calculate hand position based on player position
+            // Dominoes will rest on the long thin face (length × thickness) for ALL players.
+            // Build the exact Player 1 orientation, then yaw it around the vertical axis.
+            // Player 1 = human (front), Player 2 = left, Player 3 = back, Player 4 = right
+            let targetX, targetZ;
+            const baseQuat = new THREE.Quaternion().setFromEuler(
+                new THREE.Euler(-Math.PI / 2, 0, 0)
+            );
+            let yaw = 0;
+            
+            if (playerIndex === 0) { // Player 1: Front (human) - toward +Z
+                targetX = handOffset;
+                targetZ = pos.z;
+                yaw = Math.PI; // Face outward
+            } else if (playerIndex === 1) { // Player 4: Right - toward -X
+                targetX = pos.x;
+                targetZ = handOffset;
+                yaw = -Math.PI / 2;
+            } else if (playerIndex === 2) { // Player 3: Back - toward -Z
+                targetX = handOffset;
+                targetZ = pos.z;
+                yaw = 0; // Face outward
+            } else { // playerIndex === 3, Player 2: Left - toward +X
+                targetX = pos.x;
+                targetZ = -handOffset;
+                yaw = Math.PI / 2;
+            }
+            
+            const pickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.3;
+            // When standing on thin edge, height is width/2
+            const targetY = tableSurfaceY + DOMINO.width / 2 + 0.01;
+            const yawQuat = new THREE.Quaternion().setFromAxisAngle(
+                new THREE.Vector3(0, 1, 0),
+                yaw
+            );
+            const targetQuat = yawQuat.multiply(baseQuat);
+            domino.userData.distributedQuat = targetQuat.clone();
+            
+            // Step 1: Rise UP
+            animateDominoToPosition(
+                domino,
+                { x: startPos.x, y: pickupHeight, z: startPos.z },
+                euler.y,
+                100,
+                () => {
+                    // Step 2: Move to hand position and rotate to standing orientation
+                    animateDominoWithRotation(
+                        domino,
+                        { x: targetX, y: pickupHeight, z: targetZ },
+                        targetQuat,
+                        150,
+                        () => {
+                            // Step 3: Lower into hand (already standing)
+                            animateDominoWithRotation(
+                                domino,
+                                { x: targetX, y: targetY, z: targetZ },
+                                targetQuat,
+                                120,
+                                onComplete
+                            );
+                        }
+                    );
+                },
+                true
+            );
+        }
+
+        function onDrawComplete() {
+            updateGameStatus('All dominoes dealt. Starting bidding...');
+            
+            setTimeout(() => startBidding(), 1500);
+        }
+
+        function startBidding() {
+            gameState.phase = 'bidding';
+            // Bidding starts with player to left of shaker
+            gameState.currentBidder = (gameState.shaker + 1) % 4;
+            gameState.bids = [null, null, null, null];
+            gameState.highBid = 0;
+            gameState.highBidder = -1;
+            gameState.bidsPassed = 0;
+            updateInfoPanel();
+            
+            promptNextBid();
+        }
+
+        function promptNextBid() {
+            const bidder = gameState.currentBidder;
+            updateGameStatus(`${playerPositions[bidder].name} bidding...`);
+            
+            if (playerPositions[bidder].isAI) {
+                setTimeout(() => aiMakeBid(bidder), 1000);
+            } else {
+                // Show bidding UI for human player
+                allowPlayerInput = true;
+                isBidPhaseInput = true;
+                showBidControls(true);
+                updateGameStatus('Your turn to bid. Enter 30-42 or 0 to pass.');
+            }
+        }
+
+        function evaluateHandForBid(hand) {
+            const suitCounts = new Array(7).fill(0);
+            const suitStrengths = new Array(7).fill(0);
+            let doubleCount = 0;
+            let highDoubleCount = 0;
+            let highPipTotal = 0;
+            let countPoints = 0;
+
+            for (const domino of hand) {
+                const [a, b] = domino.userData.values;
+                highPipTotal += a + b;
+
+                if (a === b) {
+                    doubleCount++;
+                    if (a >= 5) highDoubleCount++;
+                }
+
+                // Count points in hand (5s and 10s)
+                countPoints += getDominoCountPoints(domino);
+
+                // Suit presence and strength
+                suitCounts[a]++;
+                suitCounts[b]++;
+
+                // Favor high partner pip for trump potential
+                const strengthA = 1 + (b / 6) * 0.6 + (a === b ? 0.8 : 0);
+                const strengthB = 1 + (a / 6) * 0.6 + (a === b ? 0.8 : 0);
+                suitStrengths[a] += strengthA;
+                suitStrengths[b] += strengthB;
+            }
+
+            const bestSuitStrength = Math.max(...suitStrengths);
+            const bestSuitCount = Math.max(...suitCounts);
+            const countScore = countPoints / 5 * 0.4;
+            const doubleScore = doubleCount * 0.6 + highDoubleCount * 0.6;
+            const highPipScore = (highPipTotal / 42) * 1.2;
+
+            const handScore = bestSuitStrength + (bestSuitCount * 0.5) + countScore + doubleScore + highPipScore;
+
+            const confident = handScore >= 7.5;
+            const veryConfident = handScore >= 8.5;
+            const slamConfident = handScore >= 10 && bestSuitCount >= 5 && doubleCount >= 2 && countPoints >= 10;
+            const overcall31Confident = handScore >= 9.3 && bestSuitCount >= 5 && (countPoints >= 10 || highDoubleCount >= 2);
+
+            return { handScore, confident, veryConfident, slamConfident, overcall31Confident };
+        }
+
+        function aiMakeBid(playerIndex) {
+            const hand = playerHands[playerIndex];
+            const { handScore, confident, veryConfident, slamConfident, overcall31Confident } = evaluateHandForBid(hand);
+
+            // Check if forced bid (all passed and this is shaker)
+            const allPassed = gameState.bidsPassed === 3 && playerIndex === gameState.shaker;
+
+            const myTeam = getTeam(playerIndex);
+            const oppTeam = 1 - myTeam;
+            const mustPush = gameState.teamMarks[oppTeam] >= 6 && gameState.teamMarks[myTeam] <= 6;
+            const highBidderIsTeammate = gameState.highBidder >= 0 && getTeam(gameState.highBidder) === myTeam;
+
+            let bidAmount = null;
+
+            if (allPassed) {
+                bidAmount = 30;
+            } else if (highBidderIsTeammate && gameState.highBid < 42) {
+                // Avoid unnecessary team overcalls; only jump with true slam confidence
+                bidAmount = slamConfident ? 42 : 'pass';
+            } else if (gameState.highBid >= 42) {
+                bidAmount = 'pass';
+            } else if (gameState.highBid < 30) {
+                if (confident || (mustPush && hand.length === 7)) {
+                    bidAmount = 30;
+                } else {
+                    bidAmount = 'pass';
+                }
+            } else if (gameState.highBid === 30) {
+                // Overcalling 31 should require genuinely strong evidence, not just slight edge
+                if (overcall31Confident || (mustPush && handScore >= 9.0 && veryConfident)) {
+                    bidAmount = 31;
+                } else if (slamConfident && 42 > gameState.highBid) {
+                    bidAmount = 42;
+                } else {
+                    bidAmount = 'pass';
+                }
+            } else if (gameState.highBid === 31 || (gameState.highBid > 31 && gameState.highBid < 42)) {
+                if (slamConfident) {
+                    bidAmount = 42;
+                } else {
+                    bidAmount = 'pass';
+                }
+            } else {
+                bidAmount = 'pass';
+            }
+
+            processBid(playerIndex, bidAmount);
+        }
+
+        function processBid(playerIndex, bidAmount) {
+            gameState.bids[playerIndex] = bidAmount;
+            
+            if (bidAmount === 'pass') {
+                updateGameStatus(`${playerPositions[playerIndex].name} passes.`);
+                gameState.bidsPassed++;
+            } else {
+                updateGameStatus(`${playerPositions[playerIndex].name} bids ${bidAmount}.`);
+                gameState.highBid = bidAmount;
+                gameState.highBidder = playerIndex;
+                gameState.bidsPassed = 0; // Reset pass count when someone bids
+            }
+            
+            // Check if bidding is complete
+            if (gameState.bids.every(b => b !== null)) {
+                // All players have bid
+                updateInfoPanel();
+                onBiddingComplete();
+                return;
+            }
+
+            updateInfoPanel();
+            
+            // Move to next bidder
+            gameState.currentBidder = (gameState.currentBidder + 1) % 4;
+            setTimeout(() => promptNextBid(), 800);
+        }
+
+        function onBiddingComplete() {
+            const bidder = gameState.highBidder;
+            const bid = gameState.highBid;
+            
+            updateGameStatus(`${playerPositions[bidder].name} won bid with ${bid} points!`);
+            
+            setTimeout(() => promptTrumpDeclaration(), 1500);
+        }
+
+        function promptTrumpDeclaration() {
+            gameState.phase = 'trump';
+            const bidder = gameState.highBidder;
+            
+            updateGameStatus(`${playerPositions[bidder].name} declaring trump...`);
+            
+            if (playerPositions[bidder].isAI) {
+                setTimeout(() => aiDeclareTrump(bidder), 1000);
+            } else {
+                // Show trump selection UI
+                allowPlayerInput = true;
+                isTrumpPhaseInput = true;
+                showTrumpControls(true);
+                updateGameStatus('Select trump suit.');
+            }
+        }
+
+        function aiDeclareTrump(playerIndex) {
+            const hand = playerHands[playerIndex];
+            const trumpOptions = [0, 1, 2, 3, 4, 5, 6, 'doubles'];
+
+            function evaluateTrumpOption(option) {
+                let trumpCount = 0;
+                let highTrumpCount = 0;
+                let countOnTrump = 0;
+                let offSuitStrength = 0;
+
+                for (const domino of hand) {
+                    const [a, b] = domino.userData.values;
+                    const isTrump = option === 'doubles'
+                        ? a === b
+                        : (a === option || b === option);
+
+                    if (isTrump) {
+                        trumpCount++;
+                        const rank = getSuitRank(domino, 'TRUMP');
+                        if (rank >= 4) highTrumpCount++;
+                        countOnTrump += getDominoCountPoints(domino);
+                    } else {
+                        offSuitStrength += Math.max(a, b) * 0.25;
+                    }
+                }
+
+                const controlScore = trumpCount * 1.35 + highTrumpCount * 1.0;
+                const countScore = countOnTrump * 0.08;
+                const shapeScore = offSuitStrength * 0.1;
+
+                return controlScore + countScore + shapeScore;
+            }
+
+            let bestTrump = trumpOptions[0];
+            let bestScore = -Infinity;
+            for (const option of trumpOptions) {
+                const score = evaluateTrumpOption(option);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestTrump = option;
+                }
+            }
+
+            const doublesScore = evaluateTrumpOption('doubles');
+            const bestNumberScore = Math.max(...[0, 1, 2, 3, 4, 5, 6].map(evaluateTrumpOption));
+            const trump = doublesScore >= bestNumberScore + 0.35 ? 'doubles' : bestTrump;
+
+            declareTrump(trump);
+        }
+
+        function declareTrump(trump) {
+            gameState.trump = trump;
+            
+            let trumpName;
+            if (trump === 'doubles') trumpName = 'Doubles';
+            else if (trump === 'follow-me') trumpName = 'Follow-Me';
+            else trumpName = trump + 's';
+            
+            updateGameStatus(`Trump is ${trumpName}!`);
+            updateInfoPanel();
+            
+            setTimeout(() => startPlay(), 1500);
+        }
+
+        function startPlay() {
+            gameState.phase = 'playing';
+            gameState.leadPlayer = gameState.highBidder; // Bid winner leads first
+            gameState.currentPlayer = gameState.leadPlayer;
+            gameState.currentTrick = [];
+            gameState.trickNumber = 0;
+            
+            promptNextPlay();
+        }
+
+        function promptNextPlay() {
+            const player = gameState.currentPlayer;
+            updateGameStatus(`${playerPositions[player].name}'s turn to play.`);
+            
+            if (playerPositions[player].isAI) {
+                setTimeout(() => aiPlayDomino(player), 1000);
+            } else {
+                // Allow human to click a domino
+                allowPlayerInput = true;
+                updateGameStatus('Click a domino to play it.');
+            }
+        }
+
+        function aiPlayDomino(playerIndex) {
+            const hand = playerHands[playerIndex];
+            if (hand.length === 0) return;
+            
+            const domino = chooseAiPlayDomino(playerIndex, hand);
+            playDomino(playerIndex, domino);
+        }
+
+        function isDouble(domino) {
+            const [a, b] = domino.userData.values;
+            return a === b;
+        }
+
+        function isTrumpDomino(domino) {
+            if (gameState.trump === null) return false;
+            const [a, b] = domino.userData.values;
+            if (gameState.trump === 'doubles') {
+                return a === b;
+            }
+            return a === gameState.trump || b === gameState.trump;
+        }
+
+        function getSuitLed(leadDomino) {
+            const [a, b] = leadDomino.userData.values;
+            const leadIsTrump = isTrumpDomino(leadDomino);
+            if (leadIsTrump) return 'TRUMP';
+            if (a === b) return a; // Double suits its own number
+            return Math.max(a, b); // Higher end determines suit
+        }
+
+        function matchesSuit(domino, suitLed) {
+            const [a, b] = domino.userData.values;
+            if (suitLed === 'TRUMP') return isTrumpDomino(domino);
+            if (isTrumpDomino(domino)) return false; // Trump never counts for non-trump suit
+            if (a === b) return a === suitLed;
+            return a === suitLed || b === suitLed;
+        }
+
+        function getSuitRank(domino, suitLed) {
+            const [a, b] = domino.userData.values;
+            if (suitLed === 'TRUMP') {
+                if (gameState.trump === 'doubles') {
+                    return a === b ? a : -1;
+                }
+                if (a === b && a === gameState.trump) return 7; // Highest trump double
+                const other = a === gameState.trump ? b : a;
+                return other;
+            }
+
+            if (a === b && a === suitLed) return 7; // Highest in suit
+            if (a === suitLed) return b;
+            if (b === suitLed) return a;
+            return -1;
+        }
+
+        function getCurrentWinningPlay(trick) {
+            if (trick.length === 0) return null;
+            const leadSuit = getSuitLed(trick[0].domino);
+
+            let best = trick[0];
+            let bestIsTrump = leadSuit === 'TRUMP';
+            let bestRank = getSuitRank(trick[0].domino, leadSuit);
+
+            for (let i = 1; i < trick.length; i++) {
+                const play = trick[i];
+                const isTrump = isTrumpDomino(play.domino);
+
+                if (leadSuit !== 'TRUMP') {
+                    if (isTrump && !bestIsTrump) {
+                        best = play;
+                        bestIsTrump = true;
+                        bestRank = getSuitRank(play.domino, 'TRUMP');
+                        continue;
+                    }
+                    if (bestIsTrump && isTrump) {
+                        const rank = getSuitRank(play.domino, 'TRUMP');
+                        if (rank > bestRank) {
+                            best = play;
+                            bestRank = rank;
+                        }
+                        continue;
+                    }
+                    if (bestIsTrump) continue;
+                }
+
+                const rank = getSuitRank(play.domino, leadSuit);
+                if (rank > bestRank) {
+                    best = play;
+                    bestRank = rank;
+                }
+            }
+
+            return best;
+        }
+
+        function isUnbeatableTrumpWinner(play, leadSuit) {
+            if (!play) return false;
+            if (!isTrumpDomino(play.domino)) return false;
+
+            const trumpRank = getSuitRank(play.domino, 'TRUMP');
+
+            // Doubles trump: 6-6 is the absolute top trump.
+            if (gameState.trump === 'doubles') {
+                return trumpRank === 6;
+            }
+
+            // Numeric trump: double-trump (e.g., 4-4 when 4s trump) is absolute top.
+            return trumpRank === 7;
+        }
+
+        function getDominoKey(domino) {
+            const [a, b] = domino.userData.values;
+            const low = Math.min(a, b);
+            const high = Math.max(a, b);
+            return `${low}-${high}`;
+        }
+
+        function suitToVoidIndex(suit) {
+            if (suit === 'TRUMP') return 7;
+            return suit;
+        }
+
+        function markPlayerVoidInSuit(playerIndex, suit) {
+            const suitIndex = suitToVoidIndex(suit);
+            if (suitIndex < 0 || suitIndex > 7) return;
+            gameState.playerVoidBySuit[playerIndex][suitIndex] = true;
+        }
+
+        function isPlayerKnownVoidInSuit(playerIndex, suit) {
+            const suitIndex = suitToVoidIndex(suit);
+            if (suitIndex < 0 || suitIndex > 7) return false;
+            return gameState.playerVoidBySuit[playerIndex][suitIndex];
+        }
+
+        function canPlayerPossiblyHoldDomino(playerIndex, domino) {
+            const [a, b] = domino.userData.values;
+            if (isPlayerKnownVoidInSuit(playerIndex, a)) return false;
+            if (isPlayerKnownVoidInSuit(playerIndex, b)) return false;
+            if (isTrumpDomino(domino) && isPlayerKnownVoidInSuit(playerIndex, 'TRUMP')) return false;
+            return true;
+        }
+
+        function dominoCanBeatCurrentWinner(candidateDomino, currentBestPlay, leadSuit) {
+            if (!currentBestPlay) return false;
+
+            if (leadSuit === 'TRUMP') {
+                return getSuitRank(candidateDomino, 'TRUMP') > getSuitRank(currentBestPlay.domino, 'TRUMP');
+            }
+
+            const candidateIsTrump = isTrumpDomino(candidateDomino);
+            const bestIsTrump = isTrumpDomino(currentBestPlay.domino);
+
+            if (candidateIsTrump && !bestIsTrump) return true;
+            if (candidateIsTrump && bestIsTrump) {
+                return getSuitRank(candidateDomino, 'TRUMP') > getSuitRank(currentBestPlay.domino, 'TRUMP');
+            }
+            if (!candidateIsTrump && bestIsTrump) return false;
+
+            return getSuitRank(candidateDomino, leadSuit) > getSuitRank(currentBestPlay.domino, leadSuit);
+        }
+
+        function couldPlayerLegallyBeatWithDomino(playerIndex, candidateDomino, currentBestPlay, leadSuit) {
+            if (!dominoCanBeatCurrentWinner(candidateDomino, currentBestPlay, leadSuit)) return false;
+
+            const candidateMatchesLead = matchesSuit(candidateDomino, leadSuit);
+            if (candidateMatchesLead) return true;
+
+            // Off-suit trump can only be played if player is void in led suit.
+            if (isTrumpDomino(candidateDomino) && leadSuit !== 'TRUMP') {
+                return isPlayerKnownVoidInSuit(playerIndex, leadSuit);
+            }
+
+            return false;
+        }
+
+        function canAnyOpponentStillBeatCurrentWinner(trick, observerPlayerIndex) {
+            if (!trick || trick.length === 0) return false;
+
+            const currentBest = getCurrentWinningPlay(trick);
+            if (!currentBest) return false;
+
+            const playersRemainingAfterCurrent = 3 - trick.length;
+            if (playersRemainingAfterCurrent <= 0) return false;
+
+            const nextPlayers = [];
+            for (let i = 1; i <= playersRemainingAfterCurrent; i++) {
+                nextPlayers.push((observerPlayerIndex + i) % 4);
+            }
+
+            const opponentsStillToPlay = nextPlayers.filter(p => getTeam(p) !== getTeam(observerPlayerIndex));
+            if (opponentsStillToPlay.length === 0) return false;
+
+            const playedKeys = new Set();
+            for (const teamTricks of gameState.tricks) {
+                for (const priorTrick of teamTricks) {
+                    for (const play of priorTrick) {
+                        playedKeys.add(getDominoKey(play.domino));
+                    }
+                }
+            }
+            for (const play of trick) {
+                playedKeys.add(getDominoKey(play.domino));
+            }
+
+            const myHandKeys = new Set(playerHands[observerPlayerIndex].map(getDominoKey));
+            const leadSuit = getSuitLed(trick[0].domino);
+
+            for (const oppPlayer of opponentsStillToPlay) {
+                let thisOpponentCanBeat = false;
+
+                for (const domino of dominoes) {
+                    const key = getDominoKey(domino);
+                    if (playedKeys.has(key)) continue;
+                    if (myHandKeys.has(key)) continue;
+                    if (!canPlayerPossiblyHoldDomino(oppPlayer, domino)) continue;
+
+                    if (couldPlayerLegallyBeatWithDomino(oppPlayer, domino, currentBest, leadSuit)) {
+                        thisOpponentCanBeat = true;
+                        break;
+                    }
+                }
+
+                if (thisOpponentCanBeat) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function getLegalPlays(hand, suitLed) {
+            if (!suitLed) return [...hand];
+            const matching = hand.filter(domino => matchesSuit(domino, suitLed));
+            return matching.length > 0 ? matching : [...hand];
+        }
+
+        function getDominoCountPoints(domino) {
+            const [a, b] = domino.userData.values;
+            const total = a + b;
+            const isTenPointer = (a === 5 && b === 5) || (a === 6 && b === 4) || (a === 4 && b === 6);
+            if (isTenPointer) return 10;
+            if (total === 5) return 5;
+            return 0;
+        }
+
+        function evaluateHandContext(playerIndex, hand) {
+            const suitCounts = new Array(7).fill(0);
+            let trumpCount = 0;
+            let doubleCount = 0;
+            let highDoubleCount = 0;
+            let countPoints = 0;
+
+            for (const domino of hand) {
+                const [a, b] = domino.userData.values;
+                suitCounts[a]++;
+                suitCounts[b]++;
+                if (isTrumpDomino(domino)) trumpCount++;
+                if (a === b) {
+                    doubleCount++;
+                    if (a >= 5) highDoubleCount++;
+                }
+                countPoints += getDominoCountPoints(domino);
+            }
+
+            const voids = suitCounts.filter(count => count === 0).length;
+            const partnerIndex = getTeammate(playerIndex);
+            const partnerPosition = (partnerIndex - gameState.currentPlayer + 4) % 4;
+
+            return {
+                trumpCount,
+                doubleCount,
+                highDoubleCount,
+                countPoints,
+                voids,
+                partnerPosition
+            };
+        }
+
+        function chooseAiPlayDomino(playerIndex, hand) {
+            const trick = gameState.currentTrick;
+            const leadSuit = trick.length > 0 ? getSuitLed(trick[0].domino) : null;
+            const legal = getLegalPlays(hand, leadSuit);
+
+            const bidTeam = getTeam(gameState.highBidder);
+            const myTeam = getTeam(playerIndex);
+            const trickPointsSoFar = calculateTrickPoints(trick);
+            const needPoints = myTeam === bidTeam && gameState.teamBidPoints[myTeam] < gameState.highBid;
+            const urgency = myTeam === bidTeam ? 1 : 0.6;
+
+            const context = evaluateHandContext(playerIndex, hand);
+            const wantsControl = context.trumpCount >= 3 || context.highDoubleCount >= 1;
+            const wantWin = myTeam === bidTeam ? needPoints : trickPointsSoFar >= 5;
+            const playerName = playerPositions[playerIndex].name;
+            const mustFollowLeadSuit = !!leadSuit && hand.some(domino => matchesSuit(domino, leadSuit));
+            const isBidWinner = playerIndex === gameState.highBidder;
+            const bidWinnerTeam = getTeam(gameState.highBidder);
+            const isBidWinnerTeam = myTeam === bidWinnerTeam;
+
+            function getTrumpDominoes(cards) {
+                return cards.filter(isTrumpDomino);
+            }
+
+            function getBestLeadByControl(cards, avoidCountWhenPossible = true) {
+                const sorted = [...cards].sort((d1, d2) => {
+                    const rank1 = isTrumpDomino(d1) ? 10 + getSuitRank(d1, 'TRUMP') : getSuitRank(d1, getSuitLed(d1));
+                    const rank2 = isTrumpDomino(d2) ? 10 + getSuitRank(d2, 'TRUMP') : getSuitRank(d2, getSuitLed(d2));
+                    const countPenalty1 = avoidCountWhenPossible ? getDominoCountPoints(d1) * 0.7 : 0;
+                    const countPenalty2 = avoidCountWhenPossible ? getDominoCountPoints(d2) * 0.7 : 0;
+                    const value1 = rank1 - countPenalty1;
+                    const value2 = rank2 - countPenalty2;
+                    return value2 - value1;
+                });
+                return sorted[0];
+            }
+
+            if (trick.length === 0) {
+                // Bid-winner plan: establish control first, especially with trump depth.
+                if (isBidWinner && isBidWinnerTeam) {
+                    const trumpDominoes = getTrumpDominoes(hand);
+                    const playedTrumpCount = gameState.tricks
+                        .flat()
+                        .flat()
+                        .filter(play => isTrumpDomino(play.domino)).length;
+                    const totalTrumpInSet = gameState.trump === 'doubles' ? 7 : 13;
+                    const remainingTrumpOutsideHand = Math.max(0, totalTrumpInSet - playedTrumpCount - trumpDominoes.length);
+                    const topTrumpInHand = trumpDominoes.length > 0
+                        ? [...trumpDominoes].sort((a, b) => getSuitRank(b, 'TRUMP') - getSuitRank(a, 'TRUMP'))[0]
+                        : null;
+
+                    // If we likely need to pull trump and have enough control, lead trump (not random low off-suit).
+                    if (topTrumpInHand && trumpDominoes.length >= 2 && remainingTrumpOutsideHand > 0) {
+                        const [a, b] = topTrumpInHand.userData.values;
+                        setAiReasoning(playerIndex, `${playerName}: I won the bid, so I’m leading trump ${a}-${b} to establish control and draw out opposing trump.`);
+                        return topTrumpInHand;
+                    }
+
+                    // If weak on trump depth, lead strongest control card but avoid bleeding count when possible.
+                    const nonTrump = hand.filter(d => !isTrumpDomino(d));
+                    if (nonTrump.length > 0) {
+                        const chosen = getBestLeadByControl(nonTrump, true);
+                        const [a, b] = chosen.userData.values;
+                        setAiReasoning(playerIndex, `${playerName}: Trump depth is limited, so I’m leading ${a}-${b} to keep initiative without wasting count.`);
+                        return chosen;
+                    }
+                }
+
+                // Default lead: choose a strong suit or trump if controlling, else avoid count points
+                const scored = legal.map(domino => {
+                    const leadSuit = getSuitLed(domino);
+                    const rank = isTrumpDomino(domino)
+                        ? 10 + getSuitRank(domino, 'TRUMP')
+                        : getSuitRank(domino, leadSuit);
+                    const countPenalty = getDominoCountPoints(domino) * 0.4;
+                    const score = rank + (wantsControl ? 2 : 0) - countPenalty;
+                    return { domino, score };
+                }).sort((a, b) => b.score - a.score);
+                const chosen = wantWin ? scored[0].domino : scored[scored.length - 1].domino;
+                const [a, b] = chosen.userData.values;
+                const modeText = wantWin ? 'lead strong to control the trick' : 'lead light to avoid giving away points';
+                setAiReasoning(playerIndex, `${playerName}: Leading with ${a}-${b} to ${modeText}. Trump count ${context.trumpCount}, doubles ${context.doubleCount}.`);
+                return chosen;
+            }
+
+            const currentBest = getCurrentWinningPlay(trick);
+            const partnerWinning = currentBest && getTeam(currentBest.playerIndex) === myTeam;
+            const partnerTopTrump = partnerWinning && isUnbeatableTrumpWinner(currentBest, leadSuit);
+            const partnerGuaranteedByMemory = partnerWinning && !canAnyOpponentStillBeatCurrentWinner(trick, playerIndex);
+            const partnerLockingTrick = partnerTopTrump || partnerGuaranteedByMemory;
+            const winningPlays = legal.filter(domino => {
+                const testTrick = [...trick, { playerIndex, domino }];
+                const winner = getCurrentWinningPlay(testTrick);
+                return winner && winner.playerIndex === playerIndex;
+            });
+
+            // Teammate support: if partner has an unbeatable trump winner and we are void in lead suit,
+            // safely feed count points instead of wasting neutral strength.
+            if (partnerLockingTrick && !mustFollowLeadSuit) {
+                const countDominoes = legal
+                    .filter(d => getDominoCountPoints(d) > 0)
+                    .sort((d1, d2) => getDominoCountPoints(d2) - getDominoCountPoints(d1));
+
+                if (countDominoes.length > 0) {
+                    const chosen = countDominoes[0];
+                    const [a, b] = chosen.userData.values;
+                    setAiReasoning(playerIndex, `${playerName}: Partner has the trick locked, so I’m feeding count with ${a}-${b}.`);
+                    return chosen;
+                }
+            }
+
+            if (winningPlays.length > 0 && (wantWin || (partnerWinning && urgency < 1))) {
+                // Play lowest winning domino
+                const suitForRank = leadSuit === 'TRUMP' ? 'TRUMP' : leadSuit;
+                const chosen = winningPlays.sort((d1, d2) => getSuitRank(d1, suitForRank) - getSuitRank(d2, suitForRank))[0];
+                const [a, b] = chosen.userData.values;
+                const reason = wantWin ? 'need points for our bid' : 'partner is winning, keep it cheap';
+                setAiReasoning(playerIndex, `${playerName}: Playing ${a}-${b} to win with the lowest possible card because ${reason}.`);
+                return chosen;
+            }
+
+            // If void, prefer trump only when needed or to capture count points
+            if (leadSuit && legal.every(d => !matchesSuit(d, leadSuit))) {
+                const trumps = legal.filter(isTrumpDomino);
+                if (trumps.length > 0 && (wantWin || trickPointsSoFar >= 5 || context.voids >= 2)) {
+                    const chosen = trumps.sort((d1, d2) => getSuitRank(d1, 'TRUMP') - getSuitRank(d2, 'TRUMP'))[0];
+                    const [a, b] = chosen.userData.values;
+                    setAiReasoning(playerIndex, `${playerName}: Voided in suit; trumping with ${a}-${b} to grab points/control.`);
+                    return chosen;
+                }
+            }
+
+            // Otherwise, dump lowest value legal domino, avoid giving away count points
+            const chosen = legal
+                .sort((d1, d2) => {
+                    const v1 = (d1.userData.values[0] + d1.userData.values[1]) + getDominoCountPoints(d1) * 2;
+                    const v2 = (d2.userData.values[0] + d2.userData.values[1]) + getDominoCountPoints(d2) * 2;
+                    return v1 - v2;
+                })[0];
+            const [a, b] = chosen.userData.values;
+            setAiReasoning(playerIndex, `${playerName}: Sloughing ${a}-${b} to avoid spending a stronger domino.`);
+            return chosen;
+        }
+
+        function playDomino(playerIndex, domino) {
+            // Remove from hand
+            const hand = playerHands[playerIndex];
+            const index = hand.indexOf(domino);
+            if (index === -1) return; // Not in hand
+            
+            hand.splice(index, 1);
+            
+            // Add to current trick
+            gameState.currentTrick.push({ playerIndex, domino });
+            if (gameState.currentTrick.length === 1) {
+                gameState.trickSuitLed = getSuitLed(domino);
+            } else {
+                const leadSuit = getSuitLed(gameState.currentTrick[0].domino);
+                if (!matchesSuit(domino, leadSuit)) {
+                    markPlayerVoidInSuit(playerIndex, leadSuit);
+                }
+            }
+            updateInfoPanel();
+            
+            // Animate domino to center of table
+            animateDominoToCenter(domino, gameState.currentTrick.length - 1, () => {
+                // Check if trick is complete
+                if (gameState.currentTrick.length === 4) {
+                    setTimeout(() => resolveTrick(), 1000);
+                } else {
+                    // Next player's turn
+                    gameState.currentPlayer = (gameState.currentPlayer + 1) % 4;
+                    setTimeout(() => promptNextPlay(), 500);
+                }
+            });
+        }
+
+        function animateDominoToCenter(domino, trickPosition, onComplete) {
+            // Animate domino to center of table for trick
+            const body = domino.userData.body;
+            const startPos = body.translation();
+            const rotQuat = body.rotation();
+            const euler = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(rotQuat.x, rotQuat.y, rotQuat.z, rotQuat.w));
+            
+            const centerOffset = DOMINO.length * 0.6;
+            const positions = [
+                { x: 0, z: centerOffset }, // Front
+                { x: centerOffset, z: 0 }, // Right
+                { x: 0, z: -centerOffset }, // Back
+                { x: -centerOffset, z: 0 }  // Left
+            ];
+            
+            const targetPos = positions[trickPosition];
+            const pickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.3;
+            const targetY = tableSurfaceY + DOMINO.height / 2 + 0.02;
+            
+            // Step 1: Rise UP
+            animateDominoToPosition(
+                domino,
+                { x: startPos.x, y: pickupHeight, z: startPos.z },
+                euler.y,
+                100,
+                () => {
+                    // Step 2: Move to center
+                    animateDominoToPosition(
+                        domino,
+                        { x: targetPos.x, y: pickupHeight, z: targetPos.z },
+                        0,
+                        150,
+                        () => {
+                            // Step 3: Lower down, flip face up
+                            animateDominoToPosition(
+                                domino,
+                                { x: targetPos.x, y: targetY, z: targetPos.z },
+                                0,
+                                120,
+                                () => {
+                                    animateDominoFlip(domino, 0, 200, onComplete);
+                                },
+                                false
+                            );
+                        },
+                        false
+                    );
+                },
+                true
+            );
+        }
+
+        function resolveTrick() {
+            // Determine trick winner
+            const winner = determineTrickWinner();
+            const winnerTeam = getTeam(winner);
+            
+            updateGameStatus(`${playerPositions[winner].name} wins the trick!`);
+            
+            // Award trick to winning team
+            gameState.tricks[winnerTeam].push([...gameState.currentTrick]);
+            
+            // Calculate points in this trick
+            const trickPoints = calculateTrickPoints(gameState.currentTrick);
+            gameState.teamBidPoints[winnerTeam] += trickPoints;
+            updateInfoPanel();
+            
+            // Animate trick dominoes to pile next to the winner
+            animateTrickPile(gameState.currentTrick, winner);
+            
+            // Clear current trick and AI reasoning
+            gameState.currentTrick = [];
+            clearAiReasoning();
+            updateInfoPanel();
+            gameState.trickNumber++;
+
+            const earlyDecision = getEarlyHandDecision();
+            if (earlyDecision) {
+                const decisionText = earlyDecision.bidMade
+                    ? `Bid is clinched early: Team ${earlyDecision.bidTeam + 1} has already reached ${earlyDecision.bidPoints}.`
+                    : `Bid is impossible: Team ${earlyDecision.bidTeam + 1} can reach at most ${earlyDecision.bidTeamPoints + earlyDecision.remainingPoints} of ${earlyDecision.bidPoints}.`;
+                updateGameStatus(decisionText);
+                setTimeout(() => scoreHand(), 1500);
+                return;
+            }
+            
+            // Check if hand is complete
+            if (gameState.trickNumber >= 7) {
+                setTimeout(() => scoreHand(), 1500);
+            } else {
+                // Winner leads next trick
+                gameState.leadPlayer = winner;
+                gameState.currentPlayer = winner;
+                setTimeout(() => promptNextPlay(), 1500);
+            }
+        }
+
+        function determineTrickWinner() {
+            const winner = getCurrentWinningPlay(gameState.currentTrick);
+            return winner ? winner.playerIndex : gameState.currentTrick[0].playerIndex;
+        }
+
+        function calculateTrickPoints(trick) {
+            let points = 1; // 1 point for winning trick
+            
+            // Add points for count dominoes
+            trick.forEach(({ domino }) => {
+                points += getDominoCountPoints(domino);
+            });
+            
+            return points;
+        }
+
+        function getEarlyHandDecision() {
+            if (gameState.highBidder < 0 || gameState.highBid <= 0) return null;
+
+            const TOTAL_HAND_POINTS = 42;
+            const bidTeam = getTeam(gameState.highBidder);
+            const bidPoints = gameState.highBid;
+            const bidTeamPoints = gameState.teamBidPoints[bidTeam];
+            const totalCaptured = gameState.teamBidPoints[0] + gameState.teamBidPoints[1];
+            const remainingPoints = Math.max(0, TOTAL_HAND_POINTS - totalCaptured);
+
+            if (bidTeamPoints >= bidPoints) {
+                return {
+                    decided: true,
+                    bidMade: true,
+                    bidTeam,
+                    bidPoints,
+                    bidTeamPoints,
+                    remainingPoints
+                };
+            }
+
+            const maxBidTeamPoints = bidTeamPoints + remainingPoints;
+            if (maxBidTeamPoints < bidPoints) {
+                return {
+                    decided: true,
+                    bidMade: false,
+                    bidTeam,
+                    bidPoints,
+                    bidTeamPoints,
+                    remainingPoints
+                };
+            }
+
+            return null;
+        }
+
+        function animateTrickPile(trickDominoes, winnerIndex) {
+            // Sort trick dominoes by pip count (lowest to highest)
+            const sortedTrick = [...trickDominoes].sort((a, b) => {
+                const pipsA = getDominoPipTotal(a.domino);
+                const pipsB = getDominoPipTotal(b.domino);
+                return pipsA - pipsB;
+            });
+
+            const winnerPos = playerPositions[winnerIndex];
+            const trickIndexForPlayer = gameState.playerTricksWon[winnerIndex]; // Which trick pile (0-6)
+            gameState.playerTricksWon[winnerIndex]++; // Increment for next trick
+
+            // Position piles consistently radially around table
+            const PILE_DISTANCE = TABLE.topRadius * 0.52;
+            const pileRadialPos = {
+                x: winnerPos.x * (PILE_DISTANCE / PLAYER_HAND_INSET),
+                z: winnerPos.z * (PILE_DISTANCE / PLAYER_HAND_INSET)
+            };
+
+            const pileY = tableSurfaceY + DOMINO.height / 2 + 0.02; // Face up
+            const DOMINO_LENGTH = DOMINO.length; // 3.6
+            const DOMINO_WIDTH = DOMINO.width; // ~0.24
+            const PILE_GAP = 0.25; // Gap between trick piles
+
+            // Calculate direction vectors perpendicular to radial direction
+            // This makes dominoes line up along the table edge from each player's view
+            let primaryAxis, secondaryAxis;
+            
+            if (winnerIndex === 0) {
+                // Front: dominoes line up along Z (forward-back), piles stack along X (left-right)
+                primaryAxis = { x: 0, z: DOMINO_WIDTH }; // Within-pile spacing (short)
+                secondaryAxis = { x: DOMINO_LENGTH + PILE_GAP, z: 0 }; // Between-pile spacing
+            } else if (winnerIndex === 1) {
+                // Right: dominoes line up along X (left-right), piles stack along Z (forward-back)
+                primaryAxis = { x: DOMINO_WIDTH, z: 0 };
+                secondaryAxis = { x: 0, z: DOMINO_LENGTH + PILE_GAP };
+            } else if (winnerIndex === 2) {
+                // Back: dominoes line up along Z (forward-back), piles stack along X (left-right)
+                primaryAxis = { x: 0, z: DOMINO_WIDTH };
+                secondaryAxis = { x: -(DOMINO_LENGTH + PILE_GAP), z: 0 };
+            } else {
+                // Left: dominoes line up along X (left-right), piles stack along Z (forward-back)
+                primaryAxis = { x: DOMINO_WIDTH, z: 0 };
+                secondaryAxis = { x: 0, z: -(DOMINO_LENGTH + PILE_GAP) };
+            }
+
+            // Calculate base position for this trick pile
+            const pileBasePos = {
+                x: pileRadialPos.x + secondaryAxis.x * trickIndexForPlayer,
+                z: pileRadialPos.z + secondaryAxis.z * trickIndexForPlayer
+            };
+
+            // Animate each domino to line up in the pile
+            sortedTrick.forEach(({ domino }, idx) => {
+                // Disable physics while moving to pile
+                const body = domino.userData.body;
+                body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+                body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+                // Calculate position within the pile (flush against each other)
+                const targetPos = {
+                    x: pileBasePos.x + primaryAxis.x * idx,
+                    y: pileY,
+                    z: pileBasePos.z + primaryAxis.z * idx
+                };
+
+                // Calculate target rotation based on player
+                // Face-up rotation: X = π (pips visible), Y = 0
+                const baseFaceUpEuler = new THREE.Euler(Math.PI, 0, 0);
+                let targetQuat = new THREE.Quaternion().setFromEuler(baseFaceUpEuler);
+                
+                // Rotate 180° about axis A for all players
+                const rotAboutA = new THREE.Quaternion().setFromAxisAngle(DOMINO_AXIS_A_LOCAL, Math.PI);
+                targetQuat.multiply(rotAboutA);
+                
+                // For players 1 and 3 (right and left), rotate 90° about axis B
+                if (winnerIndex === 1 || winnerIndex === 3) {
+                    const rotAboutB = new THREE.Quaternion().setFromAxisAngle(DOMINO_AXIS_B_LOCAL, Math.PI / 2);
+                    targetQuat.multiply(rotAboutB);
+                }
+
+                // Gentle animation with staggered delay - dominoes land softly
+                const delayTime = idx * 80; // Stagger 80ms between each domino
+                setTimeout(() => {
+                    const startPos = body.translation();
+                    const pickupHeight = tableSurfaceY + DOMINO.height / 2 + 0.25;
+
+                    // Step 1: Rise slightly
+                    animateDominoWithRotation(
+                        domino,
+                        { x: startPos.x, y: pickupHeight, z: startPos.z },
+                        targetQuat,
+                        120,
+                        () => {
+                            // Step 2: Move to pile position gently
+                            animateDominoWithRotation(
+                                domino,
+                                targetPos,
+                                targetQuat,
+                                250,
+                                () => {
+                                    // Step 3: Settle down gently
+                                    animateDominoWithRotation(
+                                        domino,
+                                        { x: targetPos.x, y: pileY, z: targetPos.z },
+                                        targetQuat,
+                                        150,
+                                        () => {
+                                            // Re-enable physics after settling
+                                            body.setBodyType(RAPIER.RigidBodyType.Dynamic);
+                                            body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                                            body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                                        }
+                                    );
+                                }
+                            );
+                        }
+                    );
+                }, delayTime);
+            });
+        }
+
+        function scoreHand() {
+            gameState.phase = 'scoring';
+            
+            const bidTeam = getTeam(gameState.highBidder);
+            const bidPoints = gameState.highBid;
+            const capturedPoints = gameState.teamBidPoints[bidTeam];
+            const marks = bidPoints >= 42 ? Math.floor(bidPoints / 42) : 1;
+            const bidMade = capturedPoints >= bidPoints;
+            const winningTeam = bidMade ? bidTeam : (1 - bidTeam);
+            
+            if (bidMade) {
+                updateGameStatus(`Team ${bidTeam + 1} made their bid! +${marks} mark(s)`);
+            } else {
+                updateGameStatus(`Team ${bidTeam + 1} set! Team ${winningTeam + 1} wins +${marks} mark(s)`);
+            }
+            
+            gameState.teamMarks[winningTeam] += marks;
+            updateInfoPanel();
+            
+            // Check for game winner
+            if (gameState.teamMarks[winningTeam] >= 7) {
+                setTimeout(() => endGame(winningTeam), 2000);
+            } else {
+                // Continue to next hand: regroup dominoes to center grid first
+                setTimeout(() => {
+                    updateGameStatus('Regrouping dominoes for next hand...');
+                    animateDominoesToGridRandom(() => {
+                        gameState.shaker = (gameState.shaker + 1) % 4;
+                        setTimeout(() => startHand(), 400);
+                    });
+                }, 1800);
+            }
+        }
+
+        function endGame(winningTeam) {
+            updateGameStatus(`Team ${winningTeam + 1} wins the game with ${gameState.teamMarks[winningTeam]} marks!`);
+            gameState.phase = 'complete';
+        }
+
+        // Start the first shake sequence after a brief delay
+        setTimeout(() => {
+            animateInitialShuffle();
+        }, 1000);
+
+        // --- Player Positions (4 sides around table) ---
+        // Player 0: Front (Human) - camera side
+        // Player 1: Right (AI - Opponent)
+        // Player 2: Back (AI - Teammate)
+        // Player 3: Left (AI - Opponent)
+        // Teams: 0 & 2 vs 1 & 3
+        const PLAYER_HAND_INSET = TABLE.topRadius * 0.75;
+        const playerPositions = [
+            { x: 0, z: PLAYER_HAND_INSET, name: 'You', isAI: false },              // Front (Human)
+            { x: PLAYER_HAND_INSET, z: 0, name: 'Right (Opp)', isAI: true },       // Right (Opponent)
+            { x: 0, z: -PLAYER_HAND_INSET, name: 'Partner', isAI: true },          // Back (Teammate)
+            { x: -PLAYER_HAND_INSET, z: 0, name: 'Left (Opp)', isAI: true }        // Left (Opponent)
+        ];
+
+        // Track dominoes in each player's hand
+        const playerHands = [[], [], [], []];
+        
+        // Game state
+        const gameState = {
+            currentPlayer: 0,
+            phase: 'setup', // 'setup', 'shake', 'draw', 'bidding', 'trump', 'playing', 'scoring'
+            shaker: -1, // Current shaker/dealer
+            
+            // Bidding state
+            currentBidder: -1,
+            bids: [null, null, null, null], // Each player's bid (or 'pass')
+            highBid: 0,
+            highBidder: -1,
+            bidsPassed: 0,
+            
+            // Trump state
+            trump: null, // 0-6 for number suits, 'doubles', 'follow-me'
+            
+            // Trick-taking state
+            leadPlayer: -1,
+            currentTrick: [], // Array of { playerIndex, domino } for current trick
+            trickNumber: 0, // 0-6 for tricks 1-7
+            trickSuitLed: null, // The suit led this trick
+            tricks: [[], []],  // tricks[0] = team 0&2, tricks[1] = team 1&3
+            playerVoidBySuit: Array.from({ length: 4 }, () => new Array(8).fill(false)), // per-player known void suits (0-6, TRUMP=7)
+            playerTricksWon: [0, 0, 0, 0], // Track how many tricks each player has won
+            
+            // Scoring state
+            teamMarks: [0, 0], // Marks for each team (first to 7 wins)
+            teamBidPoints: [0, 0], // Points captured this hand
+            
+            aiPending: false
+        };
+
+        function getTeam(playerIndex) {
+            return playerIndex % 2; // Team 0: players 0 & 2, Team 1: players 1 & 3
+        }
+
+        function getTeammate(playerIndex) {
+            return (playerIndex + 2) % 4;
+        }
+
+        function updateGameStatus(message) {
+            document.getElementById('game-status').textContent = message;
+        }
+
+        function formatBid(bid) {
+            if (bid === null) return '-';
+            if (bid === 'pass') return 'Pass';
+            return String(bid);
+        }
+
+        function formatTrump(trump) {
+            if (trump === null) return '-';
+            if (trump === 'doubles') return 'Doubles';
+            if (trump === 'follow-me') return 'Follow-Me';
+            return `${trump}s`;
+        }
+
+        function formatDomino(domino) {
+            if (!domino) return '-';
+            const [a, b] = domino.userData.values;
+            return `${a}-${b}`;
+        }
+
+        function updateInfoPanel() {
+            document.getElementById('bid-p0').textContent = formatBid(gameState.bids[0]);
+            document.getElementById('bid-p1').textContent = formatBid(gameState.bids[1]);
+            document.getElementById('bid-p2').textContent = formatBid(gameState.bids[2]);
+            document.getElementById('bid-p3').textContent = formatBid(gameState.bids[3]);
+            document.getElementById('trump-display').textContent = formatTrump(gameState.trump);
+
+            const trick = gameState.currentTrick;
+            const trickByPlayer = { 0: null, 1: null, 2: null, 3: null };
+            trick.forEach(play => {
+                trickByPlayer[play.playerIndex] = play.domino;
+            });
+            document.getElementById('trick-p0').textContent = formatDomino(trickByPlayer[0]);
+            document.getElementById('trick-p1').textContent = formatDomino(trickByPlayer[1]);
+            document.getElementById('trick-p2').textContent = formatDomino(trickByPlayer[2]);
+            document.getElementById('trick-p3').textContent = formatDomino(trickByPlayer[3]);
+            
+            // Update trick leader display
+            const leaderElement = document.getElementById('trick-leader');
+            if (gameState.leadPlayer >= 0 && gameState.currentTrick.length > 0) {
+                leaderElement.textContent = `Led by: ${playerPositions[gameState.leadPlayer].name}`;
+            } else {
+                leaderElement.textContent = '';
+            }
+
+            document.getElementById('points-team0').textContent = `${gameState.teamBidPoints[0]} [${gameState.teamMarks[0]}]`;
+            document.getElementById('points-team1').textContent = `${gameState.teamBidPoints[1]} [${gameState.teamMarks[1]}]`;
+        }
+
+        function setAiReasoning(playerIndex, text) {
+            // Store reasoning for this AI player
+            aiReasoningByPlayer[playerIndex] = text;
+            
+            // Update overlay to show all AI reasoning
+            const reasoningLines = [];
+            for (let i = 1; i <= 3; i++) {
+                if (aiReasoningByPlayer[i]) {
+                    reasoningLines.push(aiReasoningByPlayer[i]);
+                }
+            }
+            aiOverlay.textContent = reasoningLines.length > 0 ? reasoningLines.join('\n\n') : 'AI reasoning will appear here.';
+        }
+        
+        function clearAiReasoning() {
+            aiReasoningByPlayer[1] = '';
+            aiReasoningByPlayer[2] = '';
+            aiReasoningByPlayer[3] = '';
+            aiOverlay.textContent = 'AI reasoning will appear here.';
+        }
+
+        function aiTakeTurn(playerIndex) {
+            // Placeholder AI - will be expanded later
+            if (!playerPositions[playerIndex].isAI) return;
+            if (gameState.currentPlayer !== playerIndex) return;
+            
+            // TODO: Implement AI logic based on game phase
+            console.log(`AI Player ${playerIndex} (${playerPositions[playerIndex].name}) taking turn`);
+            
+            // For now, just advance turn
+            setTimeout(() => {
+                advanceTurn();
+            }, 1000);
+        }
+
+        function advanceTurn() {
+            gameState.currentPlayer = (gameState.currentPlayer + 1) % 4;
+            updateGameStatus(`${playerPositions[gameState.currentPlayer].name}'s turn`);
+            
+            // Trigger AI if next player is AI
+            if (playerPositions[gameState.currentPlayer].isAI) {
+                setTimeout(() => aiTakeTurn(gameState.currentPlayer), 500);
+            }
+        }
+
+        function startGame() {
+            gameState.phase = 'setup';
+            gameState.currentPlayer = 0;
+            updateGameStatus('Game starting - shuffle and deal dominoes');
+            
+            // TODO: Implement shuffle and deal logic
+            // For now just set to playing phase
+            setTimeout(() => {
+                gameState.phase = 'playing';
+                updateGameStatus(`${playerPositions[gameState.currentPlayer].name}'s turn`);
+            }, 1000);
+        }
+
+        // Don't start game automatically yet - let user drag dominoes around
+        // startGame();
+
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            if (!isDragging || !activeDomino) return;
+
+            const rightPressed = (event.buttons & 2) === 2;
+            if (rightPressed && !rightPressedPrev && isDragging && activeDomino) {
+                if (!activeDomino.userData.dragRotateBaseQuat) {
+                    rightRotateHeld = true;
+                    startDragRotate(activeDomino);
+                } else {
+                    rightRotateHeld = false;
+                    stopDragRotate(activeDomino);
+                }
+            }
+            rightPressedPrev = rightPressed;
+
+            raycaster.setFromCamera(mouse, camera);
+            const hit = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+                dragTarget.copy(hit).sub(dragOffset);
+            }
+
+            if (gameState.phase === 'playing' && gameState.currentPlayer === 0) {
+                if (playerHands[0].includes(activeDomino)) {
+                    const distToCenter = Math.hypot(dragTarget.x, dragTarget.z);
+                    if (distToCenter <= PLAY_ZONE_RADIUS && !activeDomino.userData.playZoneRotated) {
+                        activeDomino.userData.playZoneRotated = true;
+                        rotateDominoAboutAxisA(activeDomino, Math.PI / 2);
+                    }
+                }
+            }
+        });
+
+        renderer.domElement.addEventListener('pointerleave', () => {
+            mouse.set(-10, -10);
+            isDragging = false;
+        });
+
+        renderer.domElement.addEventListener('pointerdown', (event) => {
+            if (event.button === 2) {
+                return;
+            }
+
+            if (event.button !== 0) return;
+            if (!allowPlayerInput) return; // Block input during animations
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersections = raycaster.intersectObjects(dominoes, true);
+            if (intersections.length === 0) return;
+
+            let root = intersections[0].object;
+            while (root && !root.userData?.body && root.parent) {
+                root = root.parent;
+            }
+            if (!root?.userData?.body) return;
+
+            // Handle manual dealing for human player
+            if (gameState.phase === 'draw' && pendingHumanDeal) {
+                handleHumanDealPick(root);
+                return;
+            }
+
+            // Handle first shake drawing or redrawing
+            if ((firstShakePhase === 'drawing' || firstShakePhase === 'redrawing') && canDrawDomino) {
+                // Determine which player(s) can draw
+                const canThisPlayerDraw = firstShakePhase === 'redrawing' 
+                    ? firstShakeTiedPlayers.includes(0) && drawnDominoObjects[0] === null
+                    : drawnDominoObjects[0] === null;
+                
+                if (!canThisPlayerDraw) return;
+                
+                // Check if this domino is already drawn by someone or in discard pile
+                if (drawnDominoObjects.includes(root) || firstShakeDiscardPile.includes(root)) return;
+                
+                drawDominoForPlayer(root, 0);
+                return;
+            }
+
+            // Regular drag behavior (for later game phases)
+            if (firstShakePhase === 'complete' || firstShakePhase === 'playing') {
+                activeDomino = root;
+                activeDomino.userData.isPicked = true;
+                activeDomino.userData.isDragging = true;
+                
+                const body = activeDomino.userData.body;
+                // Make domino kinematic while dragging (before initialization to avoid delay)
+                body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased);
+                body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                
+                // Initialize rise animation
+                const now = performance.now();
+                activeDomino.userData.dragAnim = {
+                    startTime: now,
+                    startY: activeDomino.position.y,
+                    duration: DRAG_RISE_DURATION_MS
+                };
+                isDragging = true;
+                controls.enableRotate = false;
+
+                // Trigger an immediate position update so it starts rising on click
+                updateDominoPickupPosition(activeDomino);
+
+                const [a, b] = activeDomino.userData.values;
+                document.getElementById('game-status').textContent = `Domino ${a}-${b} picked up`;
+            }
+        });
+
+        const releaseDomino = () => {
+            if (!activeDomino) return;
+            if (rightRotateHeld) {
+                lastDraggedDomino = activeDomino;
+            }
+            const releasingDomino = activeDomino;
+
+            if (gameState.phase === 'playing' && gameState.currentPlayer === 0) {
+                if (playerHands[0].includes(releasingDomino)) {
+                    const pos = releasingDomino.position;
+                    const distToCenter = Math.hypot(pos.x, pos.z);
+                    if (distToCenter <= PLAY_ZONE_RADIUS) {
+                        releasingDomino.userData.isDragging = false;
+                        releasingDomino.userData.isPicked = false;
+                        activeDomino = null;
+                        isDragging = false;
+                        controls.enableRotate = true;
+                        allowPlayerInput = false;
+                        playDomino(0, releasingDomino);
+                        return;
+                    }
+                }
+            }
+
+            releasingDomino.userData.isDragging = false;
+            releasingDomino.userData.isPicked = false;
+            const [a, b] = releasingDomino.userData.values;
+            document.getElementById('game-status').textContent = `Domino ${a}-${b} placed down`;
+            activeDomino = null;
+            isDragging = false;
+            controls.enableRotate = true;
+        };
+
+        renderer.domElement.addEventListener('pointerup', releaseDomino);
+        renderer.domElement.addEventListener('pointercancel', releaseDomino);
+
+        renderer.domElement.addEventListener('pointerup', (event) => {
+            if (event.button === 2) {
+                return;
+            }
+        });
+
+        renderer.domElement.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            world.timestep = 1 / 60;
+            world.step();
+
+            for (const domino of dominoes) {
+                const body = domino.userData.body;
+                if (!body) continue;
+
+                // Skip physics updates if domino is being animated
+                if (domino.userData.isAnimating) {
+                    const pos = body.translation();
+                    const rot = body.rotation();
+                    domino.position.set(pos.x, pos.y, pos.z);
+                    domino.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                    continue;
+                }
+
+                const targetY = tableSurfaceY + DOMINO.height / 2 + (domino.userData.isPicked ? PICKUP_HEIGHT : 0.001);
+
+                if (domino.userData.isPicked) {
+                    if (body.bodyType() !== RAPIER.RigidBodyType.KinematicPositionBased) {
+                        body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+                        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                    }
+
+                    const current = body.translation();
+                    const desiredX = (domino === activeDomino && isDragging) ? dragTarget.x : current.x;
+                    const desiredZ = (domino === activeDomino && isDragging) ? dragTarget.z : current.z;
+
+                    // Calculate Y with rise animation
+                    let yNow = targetY;
+                    if (domino.userData.dragAnim) {
+                        const now = performance.now();
+                        const elapsed = now - domino.userData.dragAnim.startTime;
+                        const duration = domino.userData.dragAnim.duration || DRAG_RISE_DURATION_MS;
+                        const progress = (elapsed / Math.max(1, duration));
+                        const eased = easeOutCubic(progress);
+                        yNow = domino.userData.dragAnim.startY + (targetY - domino.userData.dragAnim.startY) * eased;
+                        if (progress >= 1) {
+                            domino.userData.dragAnim = null;
+                        }
+                    }
+
+                    const next = {
+                        x: current.x + (desiredX - current.x) * DRAG_LERP,
+                        y: yNow,
+                        z: current.z + (desiredZ - current.z) * DRAG_LERP
+                    };
+                    body.setNextKinematicTranslation(next);
+                    // Set mesh position directly for instant feedback
+                    domino.position.set(next.x, next.y, next.z);
+
+                    if (domino.userData.rotationTargetQuat) {
+                        const rot = body.rotation();
+                        const currentQuat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+                        const targetQuat = domino.userData.rotationTargetQuat;
+                        const blended = new THREE.Quaternion();
+                        blended.slerpQuaternions(currentQuat, targetQuat, ROTATE_LERP);
+                        body.setNextKinematicRotation(blended);
+                    }
+                } else {
+                    if (body.bodyType() !== RAPIER.RigidBodyType.Dynamic) {
+                        body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+                        body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+                        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+                    }
+                }
+
+                const pos = body.translation();
+                const rot = body.rotation();
+                if (!domino.userData.isPicked) {
+                    domino.position.set(pos.x, pos.y, pos.z);
+                    domino.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                }
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
