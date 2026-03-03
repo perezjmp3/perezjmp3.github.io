@@ -2347,13 +2347,6 @@
             return a === suitLed || b === suitLed;
         }
 
-        function isTrumpForThisTrick(domino, leadSuit) {
-            if (!isTrumpDomino(domino)) return false;
-            if (leadSuit === 'TRUMP') return true;
-            // If a trump domino also matches the led suit, it follows suit rather than acting as trump.
-            return !matchesSuit(domino, leadSuit);
-        }
-
         function getSuitRank(domino, suitLed) {
             const [a, b] = domino.userData.values;
             if (suitLed === 'TRUMP') {
@@ -2377,12 +2370,12 @@
             const leadSuit = getSuitLed(trick[0].domino);
 
             let best = trick[0];
-            let bestIsTrump = isTrumpForThisTrick(trick[0].domino, leadSuit);
+            let bestIsTrump = isTrumpDomino(trick[0].domino);
             let bestRank = getSuitRank(trick[0].domino, bestIsTrump ? 'TRUMP' : leadSuit);
 
             for (let i = 1; i < trick.length; i++) {
                 const play = trick[i];
-                const isTrump = isTrumpForThisTrick(play.domino, leadSuit);
+                const isTrump = isTrumpDomino(play.domino);
 
                 if (leadSuit !== 'TRUMP') {
                     if (isTrump && !bestIsTrump) {
@@ -2466,8 +2459,8 @@
                 return getSuitRank(candidateDomino, 'TRUMP') > getSuitRank(currentBestPlay.domino, 'TRUMP');
             }
 
-            const candidateIsTrump = isTrumpForThisTrick(candidateDomino, leadSuit);
-            const bestIsTrump = isTrumpForThisTrick(currentBestPlay.domino, leadSuit);
+            const candidateIsTrump = isTrumpDomino(candidateDomino);
+            const bestIsTrump = isTrumpDomino(currentBestPlay.domino);
 
             if (candidateIsTrump && !bestIsTrump) return true;
             if (candidateIsTrump && bestIsTrump) {
