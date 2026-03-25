@@ -2026,17 +2026,49 @@
 
             const handScore = bestSuitStrength + (bestSuitCount * 0.5) + countScore + doubleScore + highPipScore;
 
-            const confident = handScore >= 7.5;
-            const veryConfident = handScore >= 8.5;
-            const slamConfident = handScore >= 10 && bestSuitCount >= 5 && doubleCount >= 2 && countPoints >= 10;
-            const overcall31Confident = handScore >= 9.3 && bestSuitCount >= 5 && (countPoints >= 10 || highDoubleCount >= 2);
+            return { handScore, confident: handScore >= 7.5, veryConfident: handScore >= 8.5, doubleCount, highDoubleCount, countPoints, bestSuitCount };
+        }
 
-            return { handScore, confident, veryConfident, slamConfident, overcall31Confident };
+        function evaluateSlamTrumpStrength(hand, trumpOption) {
+            // Evaluate if a specific trump is strong enough for a 42 bid.
+            if (trumpOption === 'follow-me' || trumpOption === 'nello') return 0; // Not slam-eligible
+
+            let trumpCount = 0;
+            let highTrumpCount = 0;
+            let trumpDoubleExists = false;
+            let countOnTrump = 0;
+
+            for (const domino of hand) {
+                const [a, b] = domino.userData.values;
+                const isTrump = trumpOption === 'doubles'
+                    ? a === b
+                    : (typeof trumpOption === 'number' && (a === trumpOption || b === trumpOption));
+
+                if (isTrump) {
+                    trumpCount++;
+                    if (a === b && a === trumpOption) trumpDoubleExists = true;
+                    const rank = trumpOption === 'doubles'
+                        ? (a === b ? a : -1)
+                        : (a === b && a === trumpOption ? 7 : (a === trumpOption ? b : (b === trumpOption ? a : -1)));
+                    if (rank >= 4) highTrumpCount++;
+                    countOnTrump += getDominoCountPoints(domino);
+                }
+            }
+
+            // For 42, need: the trump double, most high complements, sufficient depth
+            const slamStrength = (trumpCount * 1.5 + highTrumpCount * 1.2) * (trumpDoubleExists ? 1.0 : 0.3) + countOnTrump * 0.1;
+            return slamStrength;
         }
 
         function aiMakeBid(playerIndex) {
             const hand = playerHands[playerIndex];
-            const { handScore, confident, veryConfident, slamConfident, overcall31Confident } = evaluateHandForBid(hand);
+            const { handScore, confident, veryConfident, doubleCount, highDoubleCount, countPoints, bestSuitCount } = evaluateHandForBid(hand);
+
+            // For slam (42), validate that at least one trump is strong enough
+            const slamStrengths = [0, 1, 2, 3, 4, 5, 6, 'doubles'].map(opt => evaluateSlamTrumpStrength(hand, opt));
+            const bestSlamStrength = Math.max(...slamStrengths);
+            const overcall31Confident = handScore >= 9.3 && bestSuitCount >= 5 && (countPoints >= 10 || highDoubleCount >= 2);
+            const slamConfident = bestSlamStrength >= 12.0 && bestSuitCount >= 5 && doubleCount >= 2 && countPoints >= 10;
 
             // Check if forced bid (all passed and this is shaker)
             const allPassed = gameState.bidsPassed === 3 && playerIndex === gameState.shaker;
@@ -2588,6 +2620,90 @@
             };
         }
 
+        function getPlayedDominoKeys(extraTrick = []) {
+            const played = new Set();
+
+            for (const teamTricks of gameState.tricks) {
+                for (const priorTrick of teamTricks) {
+                    for (const play of priorTrick) {
+                        played.add(getDominoKey(play.domino));
+                    }
+                }
+            }
+
+            for (const play of extraTrick) {
+                played.add(getDominoKey(play.domino));
+            }
+
+            return played;
+        }
+
+        function countUnseenLowerCardsInSuit(playerIndex, hand, suit, rank, extraTrick = []) {
+            const played = getPlayedDominoKeys(extraTrick);
+            const myKeys = new Set(hand.map(getDominoKey));
+            let lowerCount = 0;
+
+            for (const domino of dominoes) {
+                const key = getDominoKey(domino);
+                if (played.has(key) || myKeys.has(key) || !matchesSuit(domino, suit)) continue;
+
+                const dominoRank = getSuitRank(domino, suit);
+                if (dominoRank >= 0 && dominoRank < rank) {
+                    lowerCount++;
+                }
+            }
+
+            return lowerCount;
+        }
+
+        function getNelloLeadPressureScore(domino, playerIndex, hand, extraTrick = []) {
+            const bidder = gameState.nelloSoloPlayer;
+            const suit = getSuitLed(domino);
+            const rank = getSuitRank(domino, suit);
+            const suitCards = hand.filter(card => matchesSuit(card, suit));
+            const supportAbove = suitCards.filter(card => card !== domino && getSuitRank(card, suit) > rank).length;
+            const lowerUnseen = countUnseenLowerCardsInSuit(playerIndex, hand, suit, rank, extraTrick);
+            const bidderKnownVoid = isPlayerKnownVoidInSuit(bidder, suit);
+            const [a, b] = domino.userData.values;
+            const isDouble = a === b;
+
+            let score = 0;
+            score += supportAbove * 1.8;
+            score += Math.max(0, suitCards.length - 1) * 0.6;
+            score -= lowerUnseen * 1.35;
+            score += rank <= 2 ? 1.2 : (rank <= 4 ? 0.5 : -0.3);
+
+            if (isDouble) score -= 1.2;
+            if (rank === 7) score -= 1.6;
+            if (bidderKnownVoid) score -= 6;
+
+            return score;
+        }
+
+        function getNelloDiscardPriority(domino, playerIndex, hand) {
+            const [a, b] = domino.userData.values;
+            const suit = getSuitLed(domino);
+            const rank = getSuitRank(domino, suit);
+            const pressureScore = getNelloLeadPressureScore(domino, playerIndex, hand);
+            const bidderKnownVoid = isPlayerKnownVoidInSuit(gameState.nelloSoloPlayer, suit);
+            const isDouble = a === b;
+
+            return pressureScore
+                + (bidderKnownVoid ? -1.5 : 0)
+                + (isDouble ? 0.4 : 0)
+                + rank * 0.15;
+        }
+
+        function chooseBestNelloLead(playerIndex, hand, legal) {
+            return legal
+                .map(domino => ({ domino, score: getNelloLeadPressureScore(domino, playerIndex, hand) }))
+                .sort((a, b) => b.score - a.score)[0].domino;
+        }
+
+        function chooseNelloDiscard(cards, playerIndex, hand) {
+            return [...cards].sort((d1, d2) => getNelloDiscardPriority(d1, playerIndex, hand) - getNelloDiscardPriority(d2, playerIndex, hand))[0];
+        }
+
         function chooseAiPlayDomino(playerIndex, hand) {
             const trick = gameState.currentTrick;
             const leadSuit = trick.length > 0 ? getSuitLed(trick[0].domino) : null;
@@ -2638,59 +2754,72 @@
                     return chosen;
                 }
 
-                // Opponents in Nello: trying to force bidder to win tricks OR capture 42+ points
-                const defendingTeamPoints = gameState.teamBidPoints[1 - getTeam(gameState.highBidder)];
-                const pointsNeeded = Math.max(0, 42 - defendingTeamPoints);
-                
-                if (currentBest && currentBest.playerIndex === gameState.nelloSoloPlayer) {
-                    // Nello bidder is currently winning - we should take it to force them to lose
-                    const winningPlays = legal.filter(domino => {
-                        const testTrick = [...trick, { playerIndex, domino }];
-                        const winner = getCurrentWinningPlay(testTrick);
-                        return winner && winner.playerIndex === playerIndex;
-                    });
-                    
-                    if (winningPlays.length > 0) {
-                        const chosen = winningPlays.sort((d1, d2) => getSuitRank(d1, leadSuit === 'TRUMP' ? 'TRUMP' : leadSuit) - getSuitRank(d2, leadSuit === 'TRUMP' ? 'TRUMP' : leadSuit))[0];
-                        const [a, b] = chosen.userData.values;
-                        setAiReasoning(playerIndex, `${playerName}: Nello defense - overtaking with ${a}-${b} to deny bidder their desired loss. Need ${pointsNeeded} more points to set.`);
-                        return chosen;
-                    }
-                }
+                const bidderHasPlayed = trick.some(play => play.playerIndex === gameState.nelloSoloPlayer);
+                const bidderCurrentlyWinning = currentBest && currentBest.playerIndex === gameState.nelloSoloPlayer;
+                const safeNonWinners = legal.filter(domino => {
+                    const testTrick = [...trick, { playerIndex, domino }];
+                    const winner = getCurrentWinningPlay(testTrick);
+                    return !winner || winner.playerIndex !== playerIndex;
+                });
+                const bidderStillWinningPlays = legal.filter(domino => {
+                    const testTrick = [...trick, { playerIndex, domino }];
+                    const winner = getCurrentWinningPlay(testTrick);
+                    return winner && winner.playerIndex === gameState.nelloSoloPlayer;
+                });
 
-                // Try to force bidder into bad position or gather points
                 if (isLeading) {
-                    // Lead high cards to pressure the Nello bidder
-                    const withCount = legal.filter(d => getDominoCountPoints(d) > 0);
-                    const highCards = legal.filter(d => {
-                        const [x, y] = d.userData.values;
-                        return (x === y && x >= 5) || (x + y >= 10);
-                    });
-                    
-                    if (highCards.length > 0) {
-                        const chosen = highCards.sort((d1, d2) => {
-                            const s1 = d1.userData.values[0] + d1.userData.values[1];
-                            const s2 = d2.userData.values[0] + d2.userData.values[1];
-                            return s2 - s1;
-                        })[0];
-                        const [a, b] = chosen.userData.values;
-                        const pts = getDominoCountPoints(chosen);
-                        const countNote = pts > 0 ? ` and grab ${pts} points` : "";
-                        setAiReasoning(playerIndex, `${playerName}: Nello defense - leading high ${a}-${b} to pressure bidder into winning${countNote}. Need ${pointsNeeded} more to set.`);
-                        return chosen;
-                    }
+                    const chosen = chooseBestNelloLead(playerIndex, hand, legal);
+                    const [a, b] = chosen.userData.values;
+                    const attackSuit = getSuitLed(chosen);
+                    const lowerUnseen = countUnseenLowerCardsInSuit(playerIndex, hand, attackSuit, getSuitRank(chosen, attackSuit));
+                    const suitDepth = hand.filter(domino => matchesSuit(domino, attackSuit)).length - 1;
+                    const suitText = `${attackSuit}s`;
+                    const pressureText = lowerUnseen <= 1
+                        ? 'there are very few smaller safe replies left in that suit'
+                        : 'it keeps the winning bar low and awkward for the bidder';
+                    const depthText = suitDepth > 0 ? ` I also have ${suitDepth} more ${suitText} behind it.` : '';
+                    setAiReasoning(playerIndex, `${playerName}: Nello defense - leading ${a}-${b} because one bidder trick sets the contract. This attacks ${suitText} cheaply and ${pressureText}.${depthText}`);
+                    return chosen;
                 }
 
-                // Default: play low and let bidder struggle or gather points
-                const chosen = legal.sort((d1, d2) => {
-                    const v1 = d1.userData.values[0] + d1.userData.values[1];
-                    const v2 = d2.userData.values[0] + d2.userData.values[1];
-                    return v1 - v2;
-                })[0];
+                if (bidderCurrentlyWinning) {
+                    if (bidderStillWinningPlays.length > 0) {
+                        const chosen = chooseNelloDiscard(bidderStillWinningPlays, playerIndex, hand);
+                        const [a, b] = chosen.userData.values;
+                        setAiReasoning(playerIndex, `${playerName}: Nello defense - bidder is already winning, so I duck with ${a}-${b} and refuse to rescue the contract.`);
+                        return chosen;
+                    }
+
+                    const chosen = legal.sort((d1, d2) => getSuitRank(d2, leadSuit) - getSuitRank(d1, leadSuit))[0];
+                    const [a, b] = chosen.userData.values;
+                    setAiReasoning(playerIndex, `${playerName}: Nello defense - every legal play beats the bidder here, so I'm forced to overtake with ${a}-${b} and save my lower traps for later.`);
+                    return chosen;
+                }
+
+                if (!bidderHasPlayed) {
+                    if (safeNonWinners.length > 0) {
+                        const chosen = chooseNelloDiscard(safeNonWinners, playerIndex, hand);
+                        const [a, b] = chosen.userData.values;
+                        setAiReasoning(playerIndex, `${playerName}: Nello defense - staying under with ${a}-${b} so the bidder still has to answer the current winning bar.`);
+                        return chosen;
+                    }
+
+                    const chosen = legal.sort((d1, d2) => getSuitRank(d1, leadSuit) - getSuitRank(d2, leadSuit))[0];
+                    const [a, b] = chosen.userData.values;
+                    setAiReasoning(playerIndex, `${playerName}: Nello defense - forced above the current winner with ${a}-${b}, so I'm keeping the bar as low as possible for the bidder.`);
+                    return chosen;
+                }
+
+                if (safeNonWinners.length > 0) {
+                    const chosen = chooseNelloDiscard(safeNonWinners, playerIndex, hand);
+                    const [a, b] = chosen.userData.values;
+                    setAiReasoning(playerIndex, `${playerName}: Nello defense - bidder already ducked this trick, so I stay under with ${a}-${b} and keep better forcing cards for the next lead.`);
+                    return chosen;
+                }
+
+                const chosen = legal.sort((d1, d2) => getSuitRank(d1, leadSuit) - getSuitRank(d2, leadSuit))[0];
                 const [a, b] = chosen.userData.values;
-                const trickPts = calculateTrickPoints(trick.concat([{playerIndex, domino: chosen}]));
-                const strategy = trickPts >= 5 ? "playing low to collect these points" : "playing low to set up bidder for a forced win";
-                setAiReasoning(playerIndex, `${playerName}: Nello defense - ${strategy} with ${a}-${b}. Need ${pointsNeeded} more points.`);
+                setAiReasoning(playerIndex, `${playerName}: Nello defense - I can't stay under, so I take the trick with ${a}-${b} and keep the lead for another attack.`);
                 return chosen;
             }
 
